@@ -29,14 +29,10 @@
 package uk.ac.rdg.resc.ncwms.graphics;
 
 import java.awt.Color;
-import java.awt.Graphics2D;
-import java.awt.geom.AffineTransform;
-import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.Reader;
-import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -46,9 +42,6 @@ import java.util.StringTokenizer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import uk.ac.rdg.resc.edal.util.Range;
-import uk.ac.rdg.resc.ncwms.exceptions.StyleNotDefinedException;
 
 /**
  * A palette of colours that is used by an {@link ImageProducer} to render 
@@ -150,7 +143,7 @@ public class ColorPalette
                     String paletteName = file.getName().substring(0, file.getName().lastIndexOf("."));
                     ColorPalette palette = new ColorPalette(paletteName, readColorPalette(new FileReader(file)));
                     logger.debug("Read palette with name {}", paletteName);
-                    palettes.put(palette.getName(), palette);
+                    palettes.put(palette.getName().trim().toLowerCase(), palette);
                 }
                 catch(Exception e)
                 {
@@ -191,60 +184,75 @@ public class ColorPalette
     }
     
     /**
-     * Reads a colour palette (as an array of Color object) from the given File.
+     * Reads a color palette (as an array of Color object) from the given File.
      * Each line in the file contains a single colour, expressed as space-separated
-     * RGB values.  These values can be integers in the range 0->255 or floats
-     * in the range 0->1.  If the palette cannot be read, no exception is thrown
-     * but an event is logged to the error log.
+     * RGB or ARGB values.  These values can be integers in the range 0->255 
+     * or floats in the range 0->1.  If the palette cannot be read, no exception
+     * is thrown but an event is logged to the error log.
      * @throws Exception if the palette file could not be read or contains a
      * format error
      */
     private static Color[] readColorPalette(Reader paletteReader) throws Exception
     {
         BufferedReader reader = new BufferedReader(paletteReader);
-        List<Color> colours = new ArrayList<Color>();
+        List<Color> colors = new ArrayList<Color>();
         String line;
+        int lineno = 0;
         try
         {
             while((line = reader.readLine()) != null)
             {
-                if (line.startsWith("#") || line.trim().equals(""))
-                {
-                    continue; // Skip comment lines and blank lines
-                }
+                lineno++;
+                Color color;
+                Float a, r, g, b;
+                float[] components = {-1.0f, -1.0f, -1.0f, -1.0f};
+                int ncomponents = 0;
+                boolean comment = false;
                 StringTokenizer tok = new StringTokenizer(line.trim());
-                try
+                while (ncomponents < 4 && tok.hasMoreTokens() && ! comment)
                 {
-                    if (tok.countTokens() < 3) throw new Exception();
-                    // We only read the first three tokens
-                    Float r = Float.valueOf(tok.nextToken());
-                    Float g = Float.valueOf(tok.nextToken());
-                    Float b = Float.valueOf(tok.nextToken());
-                    // Check for negative numbers
-                    if (r < 0.0f || g < 0.0f || b < 0.0f) throw new Exception();
-                    if (r > 1.0f || g > 1.0f || b > 1.0f)
-                    {
-                        // We assume this colour is expressed in the range 0->255
-                        if (r > 255.0f || g > 255.0f || b > 255.0f) throw new Exception();
-                        colours.add(new Color(r.intValue(), g.intValue(), b.intValue()));
-                    }
-                    else
-                    {
-                        // the colours are expressed in the range 0->1
-                        colours.add(new Color(r, g, b));
+                    String token = tok.nextToken();
+                    if (token.startsWith("#")) {
+                       comment = true;
+                    } else {
+                       components[ncomponents++] = Float.valueOf(token);
                     }
                 }
-                catch(Exception e)
-                {
-                    throw new Exception("File format error: each line must contain three numbers between 0 and 255 or 0.0 and 1.0 (R, G, B)");
+                if (ncomponents == 0)
+                   continue;
+                if (ncomponents < 3)
+                   throw new Exception("missing components");
+                b = components[ncomponents-1];
+                g = components[ncomponents-2];
+                r = components[ncomponents-3];
+                a = ncomponents == 4 ? components[0] : 1.0f;
+                if (r <   0.0f || g <   0.0f || b <   0.0f || a <   0.0f ||
+                    r > 255.0f || g > 255.0f || b > 255.0f || a > 255.0f) {
+                    throw new Exception("invalid component value");
                 }
+                if (r > 1.0f || g > 1.0f || b > 1.0f || a > 1.0f)
+                {
+                    // color expressed in the range 0->255
+                    color = new Color(r.intValue(), g.intValue(), b.intValue(),
+                                      ncomponents == 4 ? a.intValue() : 255);
+                } else {
+                    // color expressed in the range 0->1
+                    color = new Color(r, g, b, a);
+                }
+                colors.add(color);
             }
+        }
+        catch(Exception e)
+        {
+            throw new RuntimeException("File format error at line " + lineno +": "
+                + " each line must contain 3 or 4 numbers (R G B) or (A R G B)"
+                + " between 0 and 255 or 0.0 and 1.0 (" + e.getMessage() + ").");
         }
         finally
         {
             if (reader != null) reader.close();
         }
-        return colours.toArray(new Color[0]);
+        return colors.toArray(new Color[0]);
     }
     
     public static void addPalette(String name, Reader reader){

@@ -39,6 +39,12 @@ import java.awt.Stroke;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
+import java.awt.image.DataBuffer;
+import java.awt.image.DataBufferByte;
+import java.awt.image.IndexColorModel;
+import java.awt.image.Raster;
+import java.awt.image.SampleModel;
+import java.awt.image.WritableRaster;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.ArrayList;
@@ -118,7 +124,7 @@ public final class ImageProducer
                 backgroundColor.getBlue(), null);
         Color textColor =  backgroundHSB[2] < 0.5 ? Color.WHITE : Color.BLACK;
         BufferedImage legend = new BufferedImage(LEGEND_WIDTH, LEGEND_HEIGHT,
-                                                 BufferedImage.TYPE_4BYTE_ABGR);
+                                                 BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2 = legend.createGraphics();
         g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, 
                             RenderingHints.VALUE_TEXT_ANTIALIAS_GASP);
@@ -163,18 +169,30 @@ public final class ImageProducer
      */
     public BufferedImage getColorBar(int width, int height)
     {
-        final int numColorBands = colorMap.getNumColorBands();
+        // Use this more verbose method to create the image,
+        // because the commented one fails when using index color models
+        // with color differing only in the alpha component.
+        /*
         BufferedImage colorBar = new BufferedImage(
                 width, height, BufferedImage.TYPE_BYTE_INDEXED,
                 colorMap.getColorModel());
-        Graphics2D g2 = colorBar.createGraphics();
-        AffineTransform transform = g2.getTransform();
+        */ 
+        final byte[] pixels = new byte[width * height];
+        final DataBuffer buf = new DataBufferByte(pixels, pixels.length);
+        final IndexColorModel colorModel = colorMap.getColorModel();
+        final SampleModel sampleModel = colorModel.createCompatibleSampleModel(width, height);
+        final WritableRaster raster = Raster.createWritableRaster(sampleModel, buf, null);
+        final BufferedImage colorBar = new BufferedImage(colorModel, raster, false, null);
+        final Graphics2D g2 = colorBar.createGraphics();
+        final AffineTransform transform = g2.getTransform();
+        final int numColorBands = colorMap.getNumColorBands();
         g2.translate(0.0f, (double) height);
         g2.scale((double) width, - (double) height / (double) numColorBands);
         for (int i = 0; i < numColorBands; i++)
         {
             Rectangle2D.Float band = new Rectangle2D.Float(0.0f, (float) i, 1.0f, 1.0f);
-            g2.setColor(colorMap.getIndexedColor(i));
+            Color color = colorMap.getIndexedColor(i);
+            g2.setColor(color);
             g2.fill(band);
         }
         g2.setTransform(transform);
@@ -416,10 +434,24 @@ public final class ImageProducer
         if ((style.isContour() || style.isMarker()) && (! style.isRaster()))
             return new BufferedImage(getImageWidth(), getImageHeight(),
                                      BufferedImage.TYPE_INT_ARGB);
-        else
+        else {
+            // Use this more verbose method to create the image,
+            // because the commented one fails when using index color models
+            // with color differing only in the alpha component.
+            /*
             return new BufferedImage(getImageWidth(), getImageHeight(),
                                      BufferedImage.TYPE_BYTE_INDEXED,
                                      colorMap.getColorModel());
+            */ 
+            final int width = getImageWidth();
+            final int height = getImageHeight();
+            final byte[] pixels = new byte[width * height];
+            final DataBuffer buf = new DataBufferByte(pixels, pixels.length);
+            final IndexColorModel colorModel = colorMap.getColorModel();
+            final SampleModel sampleModel = colorModel.createCompatibleSampleModel(width, height);
+            final WritableRaster raster = Raster.createWritableRaster(sampleModel, buf, null);
+            return new BufferedImage(colorModel, raster, false, null);
+        }
     }
 
     /**     * Initialize the graphics context for the current dimensions and style.     * @param image the image to plot in.
