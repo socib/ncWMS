@@ -33,6 +33,7 @@ import org.joda.time.Chronology;
 import org.joda.time.DateTime;
 import org.opengis.metadata.extent.GeographicBoundingBox;
 import uk.ac.rdg.resc.edal.coverage.grid.HorizontalGrid;
+import uk.ac.rdg.resc.ncwms.graphics.ColorMap;
 import uk.ac.rdg.resc.ncwms.graphics.ColorPalette;
 import uk.ac.rdg.resc.edal.util.Range;
 
@@ -205,7 +206,7 @@ public interface Layer
     /**
      * Returns the default number of colour bands to be used in palettes that
      * style this layer.
-     * @return number from 1 to {@link ColorPalette#MAX_NUM_COLOURS} inclusive
+     * @return number from 1 to {@link ColorMap#MAX_NUM_COLOURS} inclusive
      */
     public int getDefaultNumColorBands();
 }

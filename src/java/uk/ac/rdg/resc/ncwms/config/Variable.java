@@ -34,6 +34,7 @@ import org.simpleframework.xml.core.PersistenceException;
 import org.simpleframework.xml.core.Validate;
 import uk.ac.rdg.resc.edal.util.Range;
 import uk.ac.rdg.resc.edal.util.Ranges;
+import uk.ac.rdg.resc.ncwms.graphics.ColorMap;
 import uk.ac.rdg.resc.ncwms.graphics.ColorPalette;
 import uk.ac.rdg.resc.ncwms.wms.Layer;
 
@@ -61,7 +62,7 @@ public class Variable
     private String scaling = "linear";  // TODO Should be an enum really
 
     @Attribute(name="numColorBands", required=false)
-    private int numColorBands = ColorPalette.MAX_NUM_COLOURS;
+    private int numColorBands = ColorMap.MAX_NUM_COLOURS;
 
     private Dataset dataset;
 
@@ -106,7 +107,7 @@ public class Variable
         }
 
         // Check that the default number of color bands is within range
-        if (this.numColorBands > ColorPalette.MAX_NUM_COLOURS) this.numColorBands = ColorPalette.MAX_NUM_COLOURS;
+        if (this.numColorBands > ColorMap.MAX_NUM_COLOURS) this.numColorBands = ColorMap.MAX_NUM_COLOURS;
     }
 
     private static Range<Float> parseColorScaleRangeString(String colorScaleRangeStr)
@@ -249,7 +250,7 @@ public class Variable
     public void setNumColorBands(int numColorBands)
     {
         if (numColorBands < 0) this.numColorBands = 5;
-        else if (numColorBands > ColorPalette.MAX_NUM_COLOURS) this.numColorBands = ColorPalette.MAX_NUM_COLOURS;
+        else if (numColorBands > ColorMap.MAX_NUM_COLOURS) this.numColorBands = ColorMap.MAX_NUM_COLOURS;
         else this.numColorBands = numColorBands;
     }
 
