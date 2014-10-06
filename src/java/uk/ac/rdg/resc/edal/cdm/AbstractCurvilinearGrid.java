@@ -60,7 +60,7 @@ public abstract class AbstractCurvilinearGrid extends AbstractHorizontalGrid
         // All points will be returned in WGS84 lon-lat
         super(DefaultGeographicCRS.WGS84);
         this.curvGrid = curvGrid;
-        this.gridExtent = new GridEnvelopeImpl(curvGrid.getNi(), curvGrid.getNj());
+        this.gridExtent = new GridEnvelopeImpl(curvGrid.getNi() - 1, curvGrid.getNj() - 1);
     }
 
     @Override
