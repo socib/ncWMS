@@ -29,10 +29,11 @@
 package uk.ac.rdg.resc.ncwms.controller;
 
 import java.awt.Color;
+
 import uk.ac.rdg.resc.ncwms.exceptions.WmsException;
 import uk.ac.rdg.resc.edal.util.Range;
 import uk.ac.rdg.resc.edal.util.Ranges;
-import uk.ac.rdg.resc.ncwms.graphics.ColorPalette;
+import uk.ac.rdg.resc.ncwms.graphics.ColorMap;
 
 /**
  * Contains those portions of a GetMap request that pertain to styling and
@@ -46,18 +47,17 @@ import uk.ac.rdg.resc.ncwms.graphics.ColorPalette;
 public class GetMapStyleRequest
 {
     private String[] styles;
-    private String imageFormat;
-    private boolean transparent;
-    private Color backgroundColour;
-    private int opacity; // Opacity of the image in the range [0,100]
-    private int numColourBands; // Number of colour bands to use in the image
-    private int numContours; // Number of contours to use in the image
-    private Boolean logarithmic; // True if we're using a log scale, false if linear and null if not specified
-    // These are the data values that correspond with the extremes of the
-    // colour scale
-    private Range<Float> colorScaleRange;
-    private Color highColor;
-    private Color lowColor;
+    private String imageFormat;           // Image format's MIME type.
+    private boolean transparent;          // Use transparent background.
+    private Color backgroundColor;        // Background color.
+    private Color aboveMaxColor;          // Color for values above the scale range.
+    private Color belowMinColor;          // Color for values below the scale range.
+    private int opacity;                  // Opacity of the image in the range [0,100]
+    private int numColorBands;            // Number of color bands to use in the image
+    private int numContours;              // Number of contours to use in the image
+    private Boolean logarithmic;          // True if we're using a log scale, false if linear and null if not specified
+    private Range<Float> colorScaleRange; // The limits of the color scale. 
+
     
     /**
      * Creates a new instance of GetMapStyleRequest from the given parameters
@@ -65,85 +65,91 @@ public class GetMapStyleRequest
      */
     public GetMapStyleRequest(RequestParams params) throws WmsException
     {
-        // RequestParser replaces pluses with spaces: we must change back
-        // to parse the format correctly
-        String stylesStr = params.getMandatoryString("styles");
-        if (stylesStr.trim().isEmpty()) this.styles = new String[0];
-        else this.styles = stylesStr.split(",");
-        
-        this.imageFormat = params.getMandatoryString("format").replaceAll(" ", "+");
-
-        this.transparent = params.getBoolean("transparent", false);
-        
-        try
-        {
-            String bgc = params.getString("bgcolor", "0xFFFFFF");
-            if (bgc.length() != 8 || !bgc.startsWith("0x")) throw new Exception();
-            // Parse the hexadecimal string, ignoring the "0x" prefix
-            this.backgroundColour = new Color(Integer.parseInt(bgc.substring(2), 16));
-        }
-        catch(Exception e)
-        {
-            throw new WmsException("Invalid format for BGCOLOR");
-        }
-        
-        String lowColorStr = params.getString("belowmincolor");
-        if(lowColorStr == null) {
-            lowColor = Color.black;
-        } else if(lowColorStr.equalsIgnoreCase("extend")) {
-            lowColor = null;
-        } else if(lowColorStr.equalsIgnoreCase("transparent")) {
-            lowColor = new Color(0, 0, 0, 0);
-        } else {
-            try {
-                if (lowColorStr.length() != 8 || !lowColorStr.startsWith("0x"))
-                    throw new Exception();
-                // Parse the hexadecimal string, ignoring the "0x" prefix
-                lowColor= new Color(Integer.parseInt(lowColorStr.substring(2), 16));
-            } catch (Exception e) {
-                throw new WmsException("Invalid format for BELOWMINCOLOR");
-            }
-        }
-        
-        String highColorStr = params.getString("abovemaxcolor");
-        if(highColorStr == null) {
-            highColor = Color.black;
-        } else if(highColorStr.equalsIgnoreCase("extend")) {
-            highColor = null;
-        } else if(highColorStr.equalsIgnoreCase("transparent")) {
-            highColor = new Color(0, 0, 0, 0);
-        } else {
-            try {
-                if (highColorStr.length() != 8 || !highColorStr.startsWith("0x"))
-                    throw new Exception();
-                // Parse the hexadecimal string, ignoring the "0x" prefix
-                highColor = new Color(Integer.parseInt(highColorStr.substring(2), 16));
-            } catch (Exception e) {
-                throw new WmsException("Invalid format for ABOVEMAXCOLOR");
-            }
-        }
-        
-        this.opacity = params.getPositiveInt("opacity", 100);
-        if (this.opacity > 100) this.opacity = 100;
-        
+        this.styles = getStyles(params);
+        this.imageFormat = getImageFormat(params);
+        this.transparent = isTransparent(params);
+        this.backgroundColor = getBackgroundColor(params);
+        this.belowMinColor = getBelowMinColor(params);
+        this.aboveMaxColor = getAboveMaxColor(params);
+        this.opacity = getOpacity(params);
         this.colorScaleRange = getColorScaleRange(params);
-        this.numColourBands = getNumColourBands(params);
+        this.numColorBands = getNumColorBands(params);
         this.numContours = getNumContours(params);
         this.logarithmic = isLogScale(params);
     }
     
     /**
+     * Gets the list of styles requested by the client
+     */
+    public static String[] getStyles(RequestParams params) throws WmsException
+    {
+        String stylesStr = params.getMandatoryString("styles");
+        String[] styles;
+        if (stylesStr.trim().isEmpty())
+            styles = new String[0];
+        else
+            styles = stylesStr.split(",");
+        return styles;
+    }
+    
+    public static String getImageFormat(RequestParams params) throws WmsException
+    {
+        return params.getMandatoryString("format").replaceAll(" ", "+");
+    }
+    
+    public static boolean isTransparent(RequestParams params) throws WmsException
+    {
+        return params.getBoolean("transparent", false);
+    }
+    
+    public static Color getBackgroundColor(RequestParams params) throws WmsException
+    {
+        return params.getColor("bgcolor", Color.WHITE);
+    }
+    
+    public static Color getBelowMinColor(RequestParams params) throws WmsException
+    {
+        String belowMinColorStr = params.getString("belowmincolor");
+        if ("extend".equalsIgnoreCase(belowMinColorStr)) {
+            return null;
+        } else if ("transparent".equalsIgnoreCase(belowMinColorStr)) {
+            return new Color(0, 0, 0, 0);
+        } else {
+            return params.getColor("belowmincolor", Color.black);
+        }
+    }
+    
+    public static Color getAboveMaxColor(RequestParams params) throws WmsException
+    {
+        String aboveMaxColorStr = params.getString("abovemaxcolor");
+        if ("extend".equalsIgnoreCase(aboveMaxColorStr)) {
+            return null;
+        } else if ("transparent".equalsIgnoreCase(aboveMaxColorStr)) {
+            return new Color(0, 0, 0, 0);
+        } else {
+            return params.getColor("abovemaxcolor", Color.black);
+        }
+    }
+    
+    public static int getOpacity(RequestParams params) throws WmsException
+    {
+        int opacity = params.getPositiveInt("opacity", 100);
+        if (opacity > 100) opacity = 100;
+        return opacity;
+    }
+
+    /**
      * Gets the ColorScaleRange object requested by the client
      */
-    static Range<Float> getColorScaleRange(RequestParams params) throws WmsException
+    public static Range<Float> getColorScaleRange(RequestParams params) throws WmsException
     {
-        String csr = params.getString("colorscalerange");
-        if (csr == null || csr.equalsIgnoreCase("default"))
+        String colorScaleRangeStr = params.getString("colorscalerange");
+        if ("default".equalsIgnoreCase(colorScaleRangeStr))
         {
             // The client wants the layer's default scale range to be used
             return null;
         }
-        else if (csr.equalsIgnoreCase("auto"))
+        else if ("auto".equalsIgnoreCase(colorScaleRangeStr))
         {
             // The client wants the image to be scaled according to the image's
             // own min and max values (giving maximum contrast)
@@ -151,37 +157,22 @@ public class GetMapStyleRequest
         }
         else
         {
-            // The client has specified an explicit colour scale range
-            try
-            {
-                String[] scaleEls = csr.split(",");
-                if (scaleEls.length != 2) throw new Exception();
-                float scaleMin = Float.parseFloat(scaleEls[0]);
-                float scaleMax = Float.parseFloat(scaleEls[1]);
-                if (Float.compare(scaleMin, scaleMax) > 0) throw new Exception();
-                return Ranges.newRange(scaleMin, scaleMax);
-            }
-            catch(Exception e)
-            {
-                throw new WmsException("Invalid format for COLORSCALERANGE");
-            }
+            return params.getFloatRange("colorscalerange", null);
         }
     }
 
     /**
-     * Gets the number of colour bands requested by the client, or {@link ColorPalette#MAX_NUM_COLOURS} if none
+     * Gets the number of color bands requested by the client, or {@link ColorPalette#MAX_NUM_COLOURS} if none
      * has been set or the requested number was bigger than {@link ColorPalette#MAX_NUM_COLOURS}.
-     * @param params The RequestParams object from the client.
-     * @return the requested number of colour bands, or {@link ColorPalette#MAX_NUM_COLOURS} if none has been
-     * set or the requested number was bigger than {@link ColorPalette#MAX_NUM_COLOURS}.
-     * @throws WmsException if the client requested a negative number of colour
+     * @throws WmsException if the client requested a negative number of color
      * bands
      */
-    static int getNumColourBands(RequestParams params) throws WmsException
+    public static int getNumColorBands(RequestParams params) throws WmsException
     {
-        int numColourBands = params.getPositiveInt("numcolorbands", ColorPalette.MAX_NUM_COLOURS);
-        if (numColourBands > ColorPalette.MAX_NUM_COLOURS) numColourBands = ColorPalette.MAX_NUM_COLOURS;
-        return numColourBands;
+        int numColorBands = params.getPositiveInt("numcolorbands", ColorMap.MAX_NUM_COLORS);
+        if (numColorBands > ColorMap.MAX_NUM_COLORS)
+            numColorBands = ColorMap.MAX_NUM_COLORS;
+        return numColorBands;
     }
     
     /**
@@ -191,10 +182,11 @@ public class GetMapStyleRequest
      * @return the requested number of contours
      * @throws WmsException if the client requested a negative number of contours
      */
-    static int getNumContours(RequestParams params) throws WmsException
+    public static int getNumContours(RequestParams params) throws WmsException
     {
         int numContours = params.getPositiveInt("numcontours", 10);
-        if (numContours < 2) numContours = 10;
+        if (numContours < 2)
+            numContours = 10;
         return numContours;
     }
     
@@ -205,24 +197,27 @@ public class GetMapStyleRequest
      * @throws WmsException if the client specified a value that is not
      * "true" or "false" (case not important).
      */
-    static Boolean isLogScale(RequestParams params) throws WmsException
+    public static Boolean isLogScale(RequestParams params) throws WmsException
     {
         String logScaleStr = params.getString("logscale");
-        if (logScaleStr == null) return null;
-        else if (logScaleStr.equalsIgnoreCase("true")) return Boolean.TRUE;
-        else if (logScaleStr.equalsIgnoreCase("false")) return Boolean.FALSE;
-        else throw new WmsException("The value of LOGSCALE must be TRUE or FALSE (or can be omitted");
+        if (logScaleStr == null)
+            return null;
+        else
+            return params.getMandatoryBoolean("logscale");
     }
 
     /**
-     * @return array of style names, or an empty array if the user specified
-     * "STYLES="
+     * Returns the array of style names in comma-separated-list parameter STYLES,
+     * or an empty array if the user specified "STYLES=".
      */
     public String[] getStyles()
     {
         return styles;
     }
 
+    /**
+     * Returns the MIME type given in parameters.
+     */
     public String getImageFormat()
     {
         return imageFormat;
@@ -232,12 +227,10 @@ public class GetMapStyleRequest
      * Returns {@link Boolean#TRUE} if the client has requested a logarithmic scale,
      * {@link Boolean#FALSE} if the client has requested a linear scale,
      * or null if the client did not specify.
-     * @throws WmsException if the client specified a value that is not
-     * "true" or "false" (case not important).
      */
     public Boolean isScaleLogarithmic()
     {
-        return this.logarithmic;
+        return logarithmic;
     }
 
     public boolean isTransparent()
@@ -245,18 +238,18 @@ public class GetMapStyleRequest
         return transparent;
     }
 
-    public Color getBackgroundColour()
+    public Color getBackgroundColor()
     {
-        return backgroundColour;
+        return backgroundColor;
     }
     
 
-    public Color getLowOutOfRangeColour() {
-        return lowColor;
+    public Color getBelowMinColor() {
+        return belowMinColor;
     }
 
-    public Color getHighOutOfRangeColour() {
-        return highColor;
+    public Color getAboveMaxColor() {
+        return aboveMaxColor;
     }
 
     public int getOpacity()
@@ -273,12 +266,12 @@ public class GetMapStyleRequest
      */
     public Range<Float> getColorScaleRange()
     {
-        return this.colorScaleRange;
+        return colorScaleRange;
     }
 
-    public int getNumColourBands()
+    public int getNumColorBands()
     {
-        return numColourBands;
+        return numColorBands;
     }
     
     public int getNumContours() {
