@@ -34,6 +34,8 @@ import java.util.List;
 import org.geotoolkit.metadata.iso.extent.DefaultGeographicBoundingBox;
 import org.geotoolkit.referencing.crs.DefaultGeographicCRS;
 import org.opengis.coverage.grid.GridCoordinates;
+import org.opengis.coverage.grid.GridEnvelope;
+import org.opengis.referencing.crs.CoordinateReferenceSystem;
 import org.opengis.referencing.operation.TransformException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,6 +47,7 @@ import uk.ac.rdg.resc.edal.coverage.grid.RegularAxis;
 import uk.ac.rdg.resc.edal.coverage.grid.RegularGrid;
 import uk.ac.rdg.resc.edal.coverage.grid.impl.RegularAxisImpl;
 import uk.ac.rdg.resc.edal.coverage.grid.impl.RegularGridImpl;
+import uk.ac.rdg.resc.edal.geometry.BoundingBox;
 import uk.ac.rdg.resc.edal.geometry.HorizontalPosition;
 import uk.ac.rdg.resc.edal.util.RArray;
 import uk.ac.rdg.resc.edal.util.RUIntArray;
@@ -52,6 +55,8 @@ import uk.ac.rdg.resc.edal.util.RLongArray;
 import uk.ac.rdg.resc.edal.util.RUByteArray;
 import uk.ac.rdg.resc.edal.util.RUShortArray;
 import uk.ac.rdg.resc.edal.util.Utils;
+import static java.lang.Math.min;
+import static java.lang.Math.max;
 
 /**
  *<p>Maps real-world points to i and j indices of corresponding
@@ -94,7 +99,7 @@ public final class PixelMap implements Iterable<PixelMap.PixelMapEntry>
     private final RArray sourceGridIndices;
     /** Stores the target grid indices */
     private final RArray targetGridIndices;
-
+    
     /**
      * Maps a point in the source grid to corresponding points in the target grid.
      */
@@ -167,7 +172,11 @@ public final class PixelMap implements Iterable<PixelMap.PixelMapEntry>
         }
 
         long start = System.currentTimeMillis();
-        if (sourceGrid instanceof RectilinearGrid && targetDomain instanceof RectilinearGrid &&
+        if (targetDomain instanceof MapGrid)
+        {
+            this.initFromMapGrid(sourceGrid, (MapGrid) targetDomain);
+        }
+        else if (sourceGrid instanceof RectilinearGrid && targetDomain instanceof RectilinearGrid &&
             Utils.isWgs84LonLat(sourceGrid.getCoordinateReferenceSystem()) &&
             Utils.isWgs84LonLat(targetDomain.getCoordinateReferenceSystem()))
         {
@@ -348,6 +357,73 @@ public final class PixelMap implements Iterable<PixelMap.PixelMapEntry>
                 pixelIndex += xIndices.length;
             }
         }
+    }
+
+    /**
+     * Generates a PixelMap for reading data from the given source grid such 
+     * that the subgrid covering the target grid is extracted.
+     * @param sourceGrid The source grid
+     * @param targetGrid The target grid
+     */
+    public void initFromMapGrid(HorizontalGrid sourceGrid, MapGrid targetGrid)
+    {
+        BoundingBox mapBBox = targetGrid.getExtent();
+        CoordinateReferenceSystem targetCRS = mapBBox.getCoordinateReferenceSystem();
+        double[] minCoordinates = mapBBox.getLowerCorner().getCoordinate();
+        double[] maxCoordinates = mapBBox.getUpperCorner().getCoordinate();
+        int[] minIndices = sourceGrid.getGridExtent().getLow().getCoordinateValues();
+        int[] maxIndices = sourceGrid.getGridExtent().getHigh().getCoordinateValues(); 
+        int[] minBounds = {maxIndices[0] + 1, maxIndices[1] + 1};
+        int[] maxBounds = {minIndices[0] - 1, minIndices[1] - 1};
+        for (int i = minIndices[0]; i <= maxIndices[0]; i++)
+        {
+            for (int j = minIndices[1]; j <= maxIndices[1]; j++)
+            {
+                if (i < minBounds[0] || i > maxBounds[0] ||
+                    j < minBounds[1] || j > maxBounds[1])
+                {
+                    HorizontalPosition sourcePosition = sourceGrid.transformCoordinates(i, j);
+                    HorizontalPosition targetPosition = Utils.transformPosition(sourcePosition, targetCRS);
+                    double x = targetPosition.getX();
+                    double y = targetPosition.getY();
+                    if (minCoordinates[0] <= x && x <= maxCoordinates[0] &&
+                        minCoordinates[1] <= y && y <= maxCoordinates[1])
+                    {
+                        minBounds[0] = min(minBounds[0], i);
+                        maxBounds[0] = max(maxBounds[0], i);
+                        minBounds[1] = min(minBounds[1], j);
+                        maxBounds[1] = max(maxBounds[1], j);
+                    }
+                }
+            }
+        }
+        minBounds[0] = max(minBounds[0] - 1, minIndices[0]);
+        maxBounds[0] = min(maxBounds[0] + 1, maxIndices[0]);
+        minBounds[1] = max(minBounds[1] - 1, minIndices[1]);
+        maxBounds[1] = min(maxBounds[1] + 1, maxIndices[1]);
+        
+        for (int i = minBounds[0]; i <= maxBounds[0]; i++)
+        {
+            for (int j = minBounds[1]; j <= maxBounds[1]; j++)
+            {
+                this.sourceGridIndices.append(j*sourceGridISize + i);
+                this.targetGridIndices.append(j*sourceGridISize + i);
+                /*
+                HorizontalPosition sourcePosition = sourceGrid.transformCoordinates(i, j);
+                HorizontalPosition targetPosition = Utils.transformPosition(sourcePosition, targetCRS);
+                GridCoordinates targetIndices = targetGrid.findNearestGridPoint(targetPosition);
+                if (targetIndices == null)
+                    this.targetGridIndices.append(-1);
+                else
+                    this.targetGridIndices.append(targetIndices.getCoordinateValue(1)*targetGrid.getGridExtent().getSpan(0)
+                                                + targetIndices.getCoordinateValue(0) );
+                */
+            }
+        }
+        this.minIIndex = minBounds[0];
+        this.maxIIndex = maxBounds[0];
+        this.minJIndex = minBounds[1];
+        this.maxJIndex = maxBounds[1];
     }
 
     /**

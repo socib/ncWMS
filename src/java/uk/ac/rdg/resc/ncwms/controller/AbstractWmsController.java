@@ -64,6 +64,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.web.servlet.ModelAndView;
 import org.springframework.web.servlet.mvc.AbstractController;
 
+import uk.ac.rdg.resc.edal.cdm.MapGrid;
+import uk.ac.rdg.resc.edal.coverage.grid.impl.MapGridImpl;
 import uk.ac.rdg.resc.edal.cdm.PixelMap;
 import uk.ac.rdg.resc.edal.cdm.PixelMap.PixelMapEntry;
 import uk.ac.rdg.resc.edal.coverage.domain.Domain;
@@ -414,22 +416,23 @@ public abstract class AbstractWmsController extends AbstractController {
         // This throws an InvalidFormatException if the MIME type is not supported
         ImageFormat imageFormat = ImageFormat.get(mimeType);
 
-        GetMapDataRequest dr = getMapRequest.getDataRequest();
+        GetMapDataRequest dataRequest = getMapRequest.getDataRequest();
 
         // Check the dimensions of the image
-        if (dr.getHeight() > this.serverConfig.getMaxImageHeight() ||
-            dr.getWidth()  > this.serverConfig.getMaxImageWidth()) {
+        if (dataRequest.getHeight() > this.serverConfig.getMaxImageHeight() ||
+            dataRequest.getWidth()  > this.serverConfig.getMaxImageWidth()) {
             throw new WmsException("Requested image size exceeds the maximum of "
                 + this.serverConfig.getMaxImageWidth() + "x"
                 + this.serverConfig.getMaxImageHeight());
         }
 
-        String layerName = getLayerName(dr);
+        String layerName = getLayerName(dataRequest);
         final Layer layer = layerFactory.getLayer(layerName);
         usageLogEntry.setLayer(layer);
 
         // Get the grid onto which the data will be projected
-        RegularGrid grid = WmsUtils.getImageGrid(dr);
+        RegularGrid imageGrid = WmsUtils.getImageGrid(dataRequest);
+        HorizontalGrid layerGrid = layer.getHorizontalGrid();
 
         // Create an object that will turn data into BufferedImages
         Range<Float> scaleRange = styleRequest.getColorScaleRange();
@@ -453,7 +456,7 @@ public abstract class AbstractWmsController extends AbstractController {
             //else if (styleType.equalsIgnoreCase("arrows")) style = ImageProducer.Style.ARROWS;
             else if (styleType.equalsIgnoreCase("barb")) style = ImageProducer.Style.BARB;
             else if (styleType.equalsIgnoreCase("contour")){ 
-            	style = ImageProducer.Style.CONTOUR;
+                style = ImageProducer.Style.CONTOUR;
             }
             else if (styleType.equalsIgnoreCase("fancyvec")) style = ImageProducer.Style.FANCYVEC;
             else if (styleType.equalsIgnoreCase("linevec")) style = ImageProducer.Style.LINEVEC;
@@ -482,8 +485,8 @@ public abstract class AbstractWmsController extends AbstractController {
                                    " does not support partially-transparent pixels");
 
         ImageProducer imageProducer = new ImageProducer.Builder()
-            .imageGrid(grid)
-            .layerGrid(layer.getHorizontalGrid())
+            .layerGrid(layerGrid)
+            .imageGrid(imageGrid)
             .style(style)
             .palette(palette)
             .colorScaleRange(scaleRange)
@@ -497,11 +500,11 @@ public abstract class AbstractWmsController extends AbstractController {
             .numContours(styleRequest.getNumContours())
             .build();
 
-        double zValue = getElevationValue(dr.getElevationString(), layer);
+        double zValue = getElevationValue(dataRequest.getElevationString(), layer);
 
         // Cycle through all the provided timesteps, extracting data for each step
         List<String> tValueStrings = new ArrayList<String>();
-        List<DateTime> timeValues = getTimeValues(dr.getTimeString(), layer);
+        List<DateTime> timeValues = getTimeValues(dataRequest.getTimeString(), layer);
         if (timeValues.size() > 1 && !imageFormat.supportsMultipleFrames()) {
             throw new WmsException("The image format " + mimeType +
                     " does not support multiple frames");
@@ -517,16 +520,18 @@ public abstract class AbstractWmsController extends AbstractController {
                 tValueStr = WmsUtils.dateTimeToISO8601(timeValue);
             }
             tValueStrings.add(tValueStr);
-
+            MapGrid mapgrid = new MapGridImpl(imageGrid.getExtent(),
+                    layerGrid.getGridExtent().getSpan(0),
+                    layerGrid.getGridExtent().getSpan(1));
             if (layer instanceof ScalarLayer) {
                 // Note that if the layer doesn't have a time axis, timeValue==null but this
                 // will be ignored by readHorizontalPoints()
                 ScalarLayer scaLayer = (ScalarLayer) layer;
-                List<Float> data = scaLayer.readHorizontalPoints(timeValue, zValue, grid);
+                List<Float> data = scaLayer.readHorizontalPoints(timeValue, zValue, mapgrid);
                 imageProducer.addFrame(data, tValueStr);
             } else if (layer instanceof VectorLayer) {
                 VectorLayer vecLayer = (VectorLayer)layer;
-                List<Float>[] xyVals = vecLayer.readXYComponents(timeValue, zValue, grid);
+                List<Float>[] xyVals = vecLayer.readXYComponents(timeValue, zValue, mapgrid);
                 imageProducer.addFrame(xyVals[0], xyVals[1], tValueStr);
             } else {
                 throw new IllegalStateException("Unrecognized layer type");
@@ -550,7 +555,7 @@ public abstract class AbstractWmsController extends AbstractController {
         // Render the images and write to the output stream
         imageFormat.writeImage(imageProducer.getRenderedFrames(),
                 httpServletResponse.getOutputStream(), layer, tValueStrings,
-                dr.getElevationString(), grid.getExtent(), legend);
+                dataRequest.getElevationString(), imageGrid.getExtent(), legend);
 
         return null;
     }

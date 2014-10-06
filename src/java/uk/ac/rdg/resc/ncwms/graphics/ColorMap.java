@@ -264,6 +264,27 @@ public class ColorMap
     
     
     /**
+     * Get the minimum value in the scale range.
+     * 
+     * @return the maximum value in the scale range.
+     */
+    public double getScaleMin()
+    {
+        return minValue;
+    }
+    
+    
+    /**
+     * Get the maximum value in the scale range.
+     * 
+     * @return the maximum value in the scale range.
+     */
+    public double getScaleMax()
+    {
+        return maxValue;
+    }
+    
+    /**
      * Get the index of the color corresponding to a value.
      * 
      * Return -1 if no color for undefined values is set and 
@@ -344,14 +365,14 @@ public class ColorMap
     public double getContinuousIndexedValue(double index)
     {
         double v;
-        if (index == undefValColorIndex)
+        if (0 <= index && index <= numColorBands)
+            v = offset + extent * (index / numColorBands);
+        else if (index == undefValColorIndex)
             v = Double.NaN;
         else if (index == belowMinColorIndex)
             v = Double.NEGATIVE_INFINITY;
         else if (index == aboveMaxColorIndex)
             v = Double.POSITIVE_INFINITY;
-        else if (0 <= index && index <= numColorBands)
-            v = offset + extent * (index / numColorBands);
         else
             v = Double.NaN;
         return logScale ? Math.exp(v) : v;

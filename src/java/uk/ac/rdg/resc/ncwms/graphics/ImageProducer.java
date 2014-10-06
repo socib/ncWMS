@@ -304,6 +304,26 @@ public final class ImageProducer
         graphics.setColor(backgroundColor);
         graphics.clearRect(0, 0, width, height);
         setGraphicsTransformMap(graphics);
+        
+        List<List<Float>> cmps = new ArrayList<List<Float>>();
+        List<float[]> crds = new ArrayList<float[]>();
+        List<float[]> data = new ArrayList<float[]>();
+        int size[] = {0, 0};
+        if (style == Style.BOXFILL) {
+            cmps.add(comps.getMagnitudes());
+            extractPlotData(cmps, crds, data, size);
+            PlotUtils.plotBoxfill(graphics, colorMap, crds.get(0), crds.get(1), data.get(0), size[0], size[1]);
+        }
+        else if (true)
+            ; // PlotUtils.plotContours(graphics, comps, label, false);
+        
+        setGraphicsTransformImage(graphics);
+        if (label != null && !label.isEmpty()) {
+            PlotUtils.plotLabel(graphics, label,
+                                10, image.getHeight() - 5, new Color(255, 151, 0),
+                                1, image.getHeight() - 19, image.getWidth() - 1, 18,
+                                new Color(0, 0, 143)); 
+        }
         return image;
     }
 
