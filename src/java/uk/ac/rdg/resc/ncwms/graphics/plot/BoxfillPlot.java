@@ -1,50 +1,65 @@
-package uk.ac.rdg.resc.ncwms.graphics;
+package uk.ac.rdg.resc.ncwms.graphics.plot;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
-import java.awt.Polygon;
-import java.awt.font.TextLayout;
 import java.awt.geom.AffineTransform;
-import java.awt.geom.Line2D;
 import java.awt.geom.Path2D;
-import java.awt.geom.Rectangle2D;
+
+import uk.ac.rdg.resc.ncwms.graphics.ColorMap;
 
 /**
- * Plotting functions utility class.
- */
-public class PlotUtils {
+ * Class to draw raster plots with cells centered at the vertices of a grid.
+ * 
+ * This class implements an algorithm for creating a raster plot of a grid with
+ * a given color map. This is sometimes called a heat map or a pseudocolor plot.
+ * The plot is composed of cells centered at the vertices of the grid colored
+ * according to the value at the corresponding vertex.
+  */
+public class BoxfillPlot {
+    
+    private ColorMap colormap;
+    private float xpnts[];
+    private float ypnts[];
+    private float cpnts[];
+    private int rows;
+    private int cols;
+    
+    
     /**
-     * Plot a label composed of a text inside a box.
-     * @param g2 graphics context to plot in.
-     * @param text text of the label.
-     * @param xtext horizontal position of the text.
-     * @param ytext vertical position of the text.
-     * @param ctext color of the text.
-     * @param xbox horizontal position of the box.
-     * @param ybox vertical position of the box.
-     * @param wbox width of the box.
-     * @param hbox height of the box.
-     * @param cbox color of the box.
-     * @return the graphics context g2.
+     * Create a raster plot composed of cells around the vertices of a grid.
+     * 
+     * @param xpnts horizontal position of the grid vertices.
+     * @param ypnts vertical position of the grid vertices.
+     * @param cpnts data values at the grid vertices.
+     * @param rows number of rows in the grid.
+     * @param cols number of columns in the grid.
+     * @param colormap the color map to use.
      */
-    public static Graphics2D plotLabel(Graphics2D g2, String text,
-                                       float xtext, float ytext, Color ctext,
-                                       float xbox, float ybox,
-                                       float wbox, float hbox, Color cbox)
+    public BoxfillPlot(float[] xpnts, float[] ypnts, float[] cpnts, int rows, int cols,
+                       ColorMap colormap)
     {
-        g2.setPaint(cbox);
-        Rectangle2D box = new Rectangle2D.Float(xbox, ybox, wbox, hbox);
-        g2.draw(box);
-        TextLayout layout = new TextLayout(text,
-                                           g2.getFont(),
-                                           g2.getFontRenderContext());
-        layout.draw(g2, xtext, ytext);
-        return g2;
+        this.colormap = colormap;
+        this.xpnts = xpnts;
+        this.ypnts = ypnts;
+        this.cpnts = cpnts;
+        this.rows = rows;
+        this.cols = cols;
     }
-
-    public static void plotBoxfill(Graphics2D g2, ColorMap colormap,
-                                   float[] xpnts, float[] ypnts, float[] cpnts,
-                                   int rows, int cols)
+    
+    
+    /**
+     * Draw the raster plot in the given graphics context.
+     *
+     * Each cell of the grid is divided into four trapezoidal regions delimited
+     * by a vertex, the mid points of adjacent sides, and the barycenter
+     * of the cell. Each region is colored according to the vertex value.
+     * This creates an illusion of a plot made of cells centered at each vertex
+     * of the of the grid and colored according to the value at that vertex.
+     * 
+     * @param g2 graphics context to plot in.
+     * @param transform the transform defining the axis placement in the context.
+     */
+    public void draw(Graphics2D g2, AffineTransform transform)
     {
         int nw, ne, sw, se;
         float xsw, xse, xnw, xne, xss, xnn, xee, xww, xoo;
@@ -52,7 +67,9 @@ public class PlotUtils {
         float csw, cse, cnw, cne;
         Color c;
         Path2D.Float p = new Path2D.Float(Path2D.WIND_NON_ZERO, 4);
-        
+        AffineTransform g2transform = g2.getTransform();
+        if (transform != null)
+          g2.transform(transform);
         for (int i = 0; i < rows - 1; i++)
             for(int j = 0; j < cols - 1; j++)
             {
@@ -118,7 +135,7 @@ public class PlotUtils {
                     g2.fill(p);
                 }
             }
+        g2.setTransform(g2transform);
     }
-
 
 }

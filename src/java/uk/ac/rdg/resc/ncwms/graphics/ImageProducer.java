@@ -28,28 +28,18 @@
 
 package uk.ac.rdg.resc.ncwms.graphics;
 
-import gov.noaa.pmel.sgt.CartesianGraph;
-import gov.noaa.pmel.sgt.CartesianRenderer;
-import gov.noaa.pmel.sgt.ContourLevels;
-import gov.noaa.pmel.sgt.DefaultContourLineAttribute;
-import gov.noaa.pmel.sgt.GridAttribute;
-import gov.noaa.pmel.sgt.JPane;
-import gov.noaa.pmel.sgt.LinearTransform;
-import gov.noaa.pmel.sgt.dm.SGTData;
-import gov.noaa.pmel.sgt.dm.SGTGrid;
-import gov.noaa.pmel.sgt.dm.SimpleGrid;
-import gov.noaa.pmel.util.Dimension2D;
-import gov.noaa.pmel.util.Range2D;
-
 import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.RenderingHints;
+import java.awt.Stroke;
 import java.awt.geom.AffineTransform;
+import java.awt.geom.NoninvertibleTransformException;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.awt.image.ColorModel;
@@ -60,6 +50,7 @@ import java.awt.image.Raster;
 import java.awt.image.SampleModel;
 import java.awt.image.WritableRaster;
 import java.text.DecimalFormat;
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -72,10 +63,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import uk.ac.rdg.resc.edal.coverage.grid.HorizontalGrid;
-import uk.ac.rdg.resc.edal.geometry.HorizontalPosition;
 import uk.ac.rdg.resc.edal.util.Range;
 import uk.ac.rdg.resc.edal.util.Ranges;
 import uk.ac.rdg.resc.ncwms.exceptions.WmsException;
+import uk.ac.rdg.resc.ncwms.graphics.plot.BoxfillPlot;
+import uk.ac.rdg.resc.ncwms.graphics.plot.ContourPlot;
+import uk.ac.rdg.resc.ncwms.graphics.plot.Label;
 import uk.ac.rdg.resc.ncwms.util.WmsUtils;
 import uk.ac.rdg.resc.ncwms.wms.Layer;
 
@@ -142,10 +135,14 @@ public final class ImageProducer
                 backgroundColor.getBlue(), null);
         Color textColor =  backgroundHSB[2] < 0.5 ? Color.WHITE : Color.BLACK;
         
-        // Create the level image itself.
+        // Create the level image itself and get the craphics context.
         BufferedImage legend = new BufferedImage(LEGEND_WIDTH, LEGEND_HEIGHT,
                                                  BufferedImage.TYPE_4BYTE_ABGR);
         Graphics2D g2 = legend.createGraphics();
+        
+        // Enable text antialiasing.
+        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, 
+                            RenderingHints.VALUE_TEXT_ANTIALIAS_GASP);
         
         // Fill the background.
         g2.setColor(backgroundColor);
@@ -155,6 +152,9 @@ public final class ImageProducer
         BufferedImage colorBar = getColorBar(24, ColorMap.MAX_NUM_COLORS);
         g2.drawImage(colorBar, null, 2, 5);
         
+        // Set the text color for the scale tick values and the title.
+        g2.setColor(textColor);
+        
         // Add the scale tick values
         int numColorBands = colorMap.getNumColorBands();
         double q0 = colorMap.getContinuousIndexedValue(0.00f);
@@ -162,15 +162,12 @@ public final class ImageProducer
         double q2 = colorMap.getContinuousIndexedValue(0.50f * numColorBands);
         double q3 = colorMap.getContinuousIndexedValue(0.75f * numColorBands);
         double q4 = colorMap.getContinuousIndexedValue(numColorBands);
-        DecimalFormat formatter = (Math.max(Math.abs(q0), Math.abs(q4)) < 0.01 ||
-                                   Math.min(Math.abs(q0), Math.abs(q4)) > 1000)
-                                ? new DecimalFormat("0.###E0")
-                                : new DecimalFormat("0.#####");
-        g2.drawString(formatter.format(q0), 27,  10);
-        g2.drawString(formatter.format(q1), 27,  73);
+        NumberFormat formatter = getNumberFormat(4);
+        g2.drawString(formatter.format(q4), 27,  10);
+        g2.drawString(formatter.format(q3), 27,  73);
         g2.drawString(formatter.format(q2), 27, 137);
-        g2.drawString(formatter.format(q3), 27, 201);
-        g2.drawString(formatter.format(q4), 27, 264);
+        g2.drawString(formatter.format(q1), 27, 201);
+        g2.drawString(formatter.format(q0), 27, 264);
         
         // Add the title as rotated text
         String title = layer.getTitle();
@@ -178,12 +175,11 @@ public final class ImageProducer
         String label = (units == null || units.trim().equals("")) 
                      ? title
                      : (title + " (" + units + ")");
-        AffineTransform tx = g2.getTransform();
+        AffineTransform transform = g2.getTransform();
         g2.translate(90, 0);
         g2.rotate(0.5 * Math.PI);
-        g2.setColor(textColor);
         g2.drawString(label, 5, 0);
-        g2.setTransform(tx);
+        g2.setTransform(transform);
         
         return legend;
     }
@@ -204,7 +200,7 @@ public final class ImageProducer
                 width, height, BufferedImage.TYPE_BYTE_INDEXED,
                 colorMap.getColorModel());
         Graphics2D g2 = colorBar.createGraphics();
-        AffineTransform tx = g2.getTransform();
+        AffineTransform transform = g2.getTransform();
         g2.translate(0.0f, (double) height);
         g2.scale((double) width, - (double) height / (double) numColorBands);
         for (int i = 0; i < numColorBands; i++)
@@ -213,7 +209,7 @@ public final class ImageProducer
             g2.setColor(colorMap.getIndexedColor(i));
             g2.fill(band);
         }
-        g2.setTransform(tx);
+        g2.setTransform(transform);
         return colorBar;
     }
     
@@ -290,20 +286,12 @@ public final class ImageProducer
      * calling this method.
      * @throws WmsException 
      */
-    private BufferedImage createImage(Components comps, String label) throws WmsException 
+    private BufferedImage createImage(Components comps, String label)
+    throws WmsException 
     {
-        int width = getImageWidth();
-        int height = getImageHeight();
-        BufferedImage image = new BufferedImage(width, height,
-                                                BufferedImage.TYPE_BYTE_INDEXED,
-                                                colorMap.getColorModel());
-        Graphics2D graphics = (Graphics2D) image.getGraphics();
-        Color backgroundColor = colorMap.getExtendedUndefValColor();
-        graphics.setComposite(AlphaComposite.SrcOver);
-        graphics.setBackground(backgroundColor);
-        graphics.setColor(backgroundColor);
-        graphics.clearRect(0, 0, width, height);
-        setGraphicsTransformMap(graphics);
+        AffineTransform mapGraphicsTransform = getMapImageGraphicsTransform();
+        BufferedImage image = getMapImage();
+        Graphics2D graphics = getMapImageGraphics(image);
         
         List<List<Float>> cmps = new ArrayList<List<Float>>();
         List<float[]> crds = new ArrayList<float[]>();
@@ -312,28 +300,77 @@ public final class ImageProducer
         if (style == Style.BOXFILL) {
             cmps.add(comps.getMagnitudes());
             extractPlotData(cmps, crds, data, size);
-            PlotUtils.plotBoxfill(graphics, colorMap, crds.get(0), crds.get(1), data.get(0), size[0], size[1]);
+            BoxfillPlot plot = new BoxfillPlot(crds.get(0), crds.get(1),
+                                               data.get(0), size[0], size[1], 
+                                               colorMap);
+            plot.draw(graphics, mapGraphicsTransform);
+        } else if (style == Style.CONTOUR) {
+            float levels[] = getContourLevels();
+            cmps.add(comps.getMagnitudes());
+            extractPlotData(cmps, crds, data, size);
+            NumberFormat formatter = getNumberFormat(4);
+            Font font = new Font(graphics.getFont().getName(), Font.BOLD,
+                                 Math.round(7.0f * 96.0f / 72.0f));
+            Stroke lineStroke = new BasicStroke(0.75f * 96.0f / 72.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
+            Stroke textStroke = new BasicStroke(1.5f * 96.0f / 72.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
+            ContourPlot plot = new ContourPlot(
+                    crds.get(0), crds.get(1), data.get(0), size[0], size[1],
+                    levels, Color.BLACK, lineStroke,
+                    formatter, font, Color.WHITE, textStroke,
+                    4.0f, 3.0f);
+            plot.draw(graphics, mapGraphicsTransform);
         }
-        else if (true)
-            ; // PlotUtils.plotContours(graphics, comps, label, false);
-        
-        setGraphicsTransformImage(graphics);
         if (label != null && !label.isEmpty()) {
-            PlotUtils.plotLabel(graphics, label,
-                                10, image.getHeight() - 5, new Color(255, 151, 0),
-                                1, image.getHeight() - 19, image.getWidth() - 1, 18,
-                                new Color(0, 0, 143)); 
+            Label caption = new Label(
+                    label, 10, image.getHeight() - 5, new Color(255, 151, 0), graphics.getFont(),
+                    1, image.getHeight() - 19, image.getWidth() - 1, 18, new Color(0, 0, 143));
+            caption.draw(graphics, null);
         }
         return image;
     }
 
-    private void setGraphicsTransformImage(Graphics2D graphics)
+    /**
+     * Create an image for the current dimensions and style.
+     * @return the image to plot in.
+     */
+    private BufferedImage getMapImage()
     {
-        AffineTransform transform = new AffineTransform();
-        graphics.setTransform(transform);
+        if (isContourStyle(style))
+            return new BufferedImage(getImageWidth(), getImageHeight(),
+                                     BufferedImage.TYPE_INT_ARGB);
+        else
+            return new BufferedImage(getImageWidth(), getImageHeight(),
+                                     BufferedImage.TYPE_BYTE_INDEXED,
+                                     colorMap.getColorModel());
     }
 
-    private void setGraphicsTransformMap(Graphics2D graphics)
+    /**     * Initialize the graphics context for the current dimensions and style.     * @param image the image to plot in.
+     * @return the graphics context of the image to plot in.
+     */    private Graphics2D getMapImageGraphics(Image image)
+    {
+        Color backgroundColor = colorMap.getExtendedUndefValColor();
+        int width = getImageWidth();
+        int height = getImageHeight();
+        Graphics2D graphics = (Graphics2D) image.getGraphics();
+        graphics.setComposite(AlphaComposite.SrcOver);
+        graphics.setBackground(backgroundColor);
+        graphics.setColor(backgroundColor);
+        graphics.clearRect(0, 0, width, height);
+        graphics.clipRect(0, 0, width, height);
+        if (isContourStyle(style))
+        {
+            graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_GASP);
+        }
+        return graphics;
+    }
+    
+    /**
+     * Compute the transform to align the plot axes with the edges of the image.
+     * @return the transform from map coordinates to image coordinates.
+     */
+    private AffineTransform getMapImageGraphicsTransform()
     {
         double iw = getImageWidth();
         double ih = getImageHeight();
@@ -341,17 +378,58 @@ public final class ImageProducer
         double mh = getMapHeight();
         double mx = getMapOriginX();
         double my = getMapOriginY();
-        System.out.println(String.format("Params %8.5f %8.5f %8.5f %8.5f %8.5f %8.5f",
-                                         iw, ih, mw, mh, mx, my));
         AffineTransform transform = new AffineTransform();
         transform.translate(0, ih);
         transform.scale(iw/mw, -ih/mh);
         transform.translate(-mx, -my);
-        graphics.setTransform(transform);
-        // Rectangle2D rectangle = new Rectangle2D.Double(mx, my, mw, mh);
-        // graphics.setClip(rectangle);
+        return transform;
     }
-
+    
+    
+    /**
+     * Compute the contour levels from the number of contours and the color scale.
+     * @return the contour levels to plot.
+     */
+    private float[] getContourLevels()
+    {
+        float[] levels = new float[numContours];
+        float factor = (float) colorMap.getNumColorBands() / (float) (numContours - 1);
+        for (int i = 0; i < numContours; i++)
+            levels[i] = (float) colorMap.getContinuousIndexedValue(i * factor);
+        return levels;
+    }
+    
+    /**
+     * Get a formatter for the values in the current scale range.
+     * 
+     * The 
+     * @param digits the number of significant digits in short form
+     * @return a decimal format using fixed precision or scientific notation.
+     */
+    private NumberFormat getNumberFormat(int digits)
+    {
+        double absa = Math.abs(colorMap.getScaleMin());
+        double absb = Math.abs(colorMap.getScaleMax());
+        double absmax = Math.max(absa, absb);
+        int ordmax = (int) Math.floor(Math.log10(absmax));
+        String integer, fraction, exponent, pattern;
+        if (-digits < ordmax - 1 && ordmax + 1 < digits) {
+            integer = "0";
+            fraction = "." + new String(new char[digits - ordmax - 1]).replace("\0", "#");
+            exponent = "";
+        } else if (ordmax + 1 == digits) {
+            integer = "0";
+            fraction = "";
+            exponent = "";
+        } else {
+            integer = "0";
+            fraction = "." + new String(new char[digits-1]).replace("\0", "#");
+            exponent = "E0";
+        }
+        pattern = integer + fraction + exponent;
+        return new DecimalFormat(" " + pattern + ";" + "-" + pattern);
+    }
+    
     /**
      * Gets the frames as BufferedImages, ready to be turned into a picture or
      * animation.  This is called just before the picture is due to be created,
@@ -377,7 +455,7 @@ public final class ImageProducer
         }
         return this.renderedFrames;
     }
-
+    
     /**
      * Makes sure that the scale is set: if we are auto-scaling, this reads all
      * of the data we have stored to find the extremes.  If the scale has
@@ -411,10 +489,108 @@ public final class ImageProducer
             colorMap.setScaleRange(scaleMin, scaleMax);
         }
     }
-
+    
+    /**
+     * Check if the style of the map plot is arrow (some kind of vector marker).
+     * @param style the style of the plot     * @return whether the style of the plot is arrow.
+     */
     private boolean isArrowStyle(Style style)
     {
         return style == Style.BARB || style == Style.FANCYVEC || style == Style.STUMPVEC || style == Style.TRIVEC || style == Style.LINEVEC;
+    }
+
+    /**
+     * Check if the style of the map plot is contour.
+     * @param style the style of the plot
+     * @return whether the style of the plot is contour.
+     */
+    private boolean isContourStyle(Style style)
+    {
+        return style == Style.CONTOUR;
+    }
+
+    /**
+     * Extract the subgrid with the data to plot.
+     * 
+     * This is the counterpart of the hack in PixelMap to extract the values
+     * of the layer at the vertices of the subgrid that covers the bounding box
+     * of the map.
+     * @param cmps the values of the layer components as extracted by the PixelMap hack.
+     * @param crds the coordinates of the vertices of the subgrid in the requested map reference system.
+     * @param data the values of the layer at the vertices of the subgrid.
+     * @param shape the shape of the subgrid.
+     * @throws WmsException if there is no transformation between the layer's and the map reference systems. 
+     */
+    private void extractPlotData(List<List<Float>> cmps,
+                                 List<float[]> crds, List<float[]> data,
+                                 int[] shape) throws WmsException
+    {
+        final int step = layerGrid.getGridExtent().getSpan(0);
+        final int ibeg = layerGrid.getGridExtent().getLow(0);
+        final int iend = layerGrid.getGridExtent().getHigh(0);
+        final int jbeg = layerGrid.getGridExtent().getLow(1);
+        final int jend = layerGrid.getGridExtent().getHigh(1);
+        int imin = iend;
+        int imax = ibeg - 1;
+        int jmin = jend;
+        int jmax = jbeg - 1;
+        for (List<Float> c : cmps)
+            for (int i = ibeg; i <= iend; i++)
+                for (int j = jbeg; j <= jend; j++)
+                    if (i < imin || i > imax || i < jmin || j > jmax)
+                    {
+                        Float v = c.get(i + j * step);
+                        if (v != null && ! Float.isNaN(v))
+                        {
+                            imin = Math.min(imin, i);
+                            imax = Math.max(imax, i);
+                            jmin = Math.min(jmin, j);
+                            jmax = Math.max(jmax, j);
+                        }
+                    }
+        data.clear();
+        crds.clear();
+        shape[0] = Math.max(imax - imin + 1, 0);
+        shape[1] = Math.max(jmax - jmin + 1, 0);
+        final int total = shape[0] * shape[1];
+        for (List<Float> c : cmps)
+        {
+            float[] vals = new float[total];
+            int k = 0;
+            for (int i = imin; i <= imax; i++)
+                for (int j = jmin; j <= jmax; j++) {
+                    Float v = c.get(i + j * step);
+                    vals[k++] = (v == null) ? Float.NaN : v;
+                }
+            data.add(vals);
+        }
+        MathTransform transform;
+        try {
+            transform = CRS.findMathTransform(
+                    layerGrid.getCoordinateReferenceSystem(),
+                    imageGrid.getCoordinateReferenceSystem(),
+                    true);
+        } catch (FactoryException e) {
+            throw new WmsException("Could not get transform from layer reference system to map reference system");
+        }
+        float[] xcrd = new float[total];
+        float[] ycrd = new float[total];
+        int k = 0;
+        for (int i = imin; i <= imax; i++)
+            for (int j = jmin; j <= jmax; j++)
+            {
+                double[] point = layerGrid.transformCoordinates(i, j).getCoordinate();
+                try {
+                    transform.transform(point, 0, point, 0, 1);
+                } catch (TransformException e) {
+                    throw new WmsException("Could not convert coordinates from layer reference system to map reference system");
+                }
+                xcrd[k] = (float) point[0];
+                ycrd[k] = (float) point[1];
+                k++;
+            }
+        crds.add(xcrd);
+        crds.add(ycrd);
     }
 
     /**
@@ -437,7 +613,6 @@ public final class ImageProducer
         private Style style = null;
         private float vectorScale = 1;
         private int numContours = 10;
-        private String units = null;
         private int equator_y_index = 0;
 
         /** Sets map grid (contains the size of the picture and the CRS) */
@@ -469,12 +644,11 @@ public final class ImageProducer
             return this;
         }
 
-        /** Sets the number of colour bands to use in the image, from 0 to 254
+        /** Sets the number of colour bands to use in the image, from 0 to 253
          * (default 254) */
         public Builder numColorBands(int numColorBands) {
-            if (numColorBands < 0 || numColorBands > ColorMap.MAX_NUM_COLORS) {
-                throw new IllegalArgumentException();
-            }
+            if (numColorBands < 0 || numColorBands > ColorMap.MAX_NUM_COLORS)
+                throw new IllegalArgumentException("invalid number of color bands " + numColorBands);
             this.numColorBands = numColorBands;
             return this;
         }
@@ -509,7 +683,7 @@ public final class ImageProducer
             this.opacity = opacity;
             return this;
         }
-
+        
         /** Sets the vectorScale (defaults to 1.0) */
         public Builder vectorScale(float scale) {
             if (scale <= 0) throw new IllegalArgumentException();
@@ -558,7 +732,6 @@ public final class ImageProducer
             this.highColor = highColor;
             return this;
         }
-        
 
         /**
          * Checks the fields for internal consistency, then creates and returns
@@ -568,7 +741,6 @@ public final class ImageProducer
          */
         public ImageProducer build()
         {
-
             ImageProducer ip = new ImageProducer();
             ip.layerGrid = this.layerGrid;
             ip.imageGrid = this.imageGrid;
