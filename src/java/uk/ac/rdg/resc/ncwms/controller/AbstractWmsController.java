@@ -38,13 +38,10 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
 
 import javax.imageio.ImageIO;
 import javax.servlet.http.HttpServletRequest;
@@ -64,17 +61,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.web.servlet.ModelAndView;
 import org.springframework.web.servlet.mvc.AbstractController;
 
-import uk.ac.rdg.resc.edal.cdm.MapGrid;
-import uk.ac.rdg.resc.edal.coverage.grid.impl.MapGridImpl;
-import uk.ac.rdg.resc.edal.cdm.PixelMap;
-import uk.ac.rdg.resc.edal.cdm.PixelMap.PixelMapEntry;
 import uk.ac.rdg.resc.edal.coverage.domain.Domain;
 import uk.ac.rdg.resc.edal.coverage.domain.impl.HorizontalDomain;
 import uk.ac.rdg.resc.edal.coverage.grid.GridCoordinates;
 import uk.ac.rdg.resc.edal.coverage.grid.HorizontalGrid;
-import uk.ac.rdg.resc.edal.coverage.grid.RectilinearGrid;
-import uk.ac.rdg.resc.edal.coverage.grid.ReferenceableAxis;
+import uk.ac.rdg.resc.edal.coverage.grid.MapGrid;
 import uk.ac.rdg.resc.edal.coverage.grid.RegularGrid;
+import uk.ac.rdg.resc.edal.coverage.grid.impl.MapGridImpl;
 import uk.ac.rdg.resc.edal.geometry.HorizontalPosition;
 import uk.ac.rdg.resc.edal.geometry.LonLatPosition;
 import uk.ac.rdg.resc.edal.geometry.impl.HorizontalPositionImpl;
@@ -90,7 +83,6 @@ import uk.ac.rdg.resc.ncwms.exceptions.LayerNotDefinedException;
 import uk.ac.rdg.resc.ncwms.exceptions.StyleNotDefinedException;
 import uk.ac.rdg.resc.ncwms.exceptions.Wms1_1_1Exception;
 import uk.ac.rdg.resc.ncwms.exceptions.WmsException;
-import uk.ac.rdg.resc.ncwms.graphics.BilinearInterpolator;
 import uk.ac.rdg.resc.ncwms.graphics.ColorPalette;
 import uk.ac.rdg.resc.ncwms.graphics.ImageFormat;
 import uk.ac.rdg.resc.ncwms.graphics.ImageProducer;
@@ -199,6 +191,7 @@ public abstract class AbstractWmsController extends AbstractController {
                         httpServletResponse, usageLogEntry);
         } catch (WmsException wmse) {
             // We don't log these errors
+            wmse.printStackTrace();
             usageLogEntry.setException(wmse);
             String wmsVersion = params.getWmsVersion();
             if (wmsVersion != null && wmsVersion.equals("1.1.1")) {
@@ -433,6 +426,7 @@ public abstract class AbstractWmsController extends AbstractController {
         // Get the grid onto which the data will be projected
         RegularGrid imageGrid = WmsUtils.getImageGrid(dataRequest);
         HorizontalGrid layerGrid = layer.getHorizontalGrid();
+        MapGrid mapGrid = new MapGridImpl(layerGrid, imageGrid);
 
         // Create an object that will turn data into BufferedImages
         Range<Float> scaleRange = styleRequest.getColorScaleRange();
@@ -455,9 +449,7 @@ public abstract class AbstractWmsController extends AbstractController {
             else if (styleType.equalsIgnoreCase("vector")) style = ImageProducer.Style.VECTOR;
             //else if (styleType.equalsIgnoreCase("arrows")) style = ImageProducer.Style.ARROWS;
             else if (styleType.equalsIgnoreCase("barb")) style = ImageProducer.Style.BARB;
-            else if (styleType.equalsIgnoreCase("contour")){ 
-                style = ImageProducer.Style.CONTOUR;
-            }
+            else if (styleType.equalsIgnoreCase("contour")) style = ImageProducer.Style.CONTOUR;
             else if (styleType.equalsIgnoreCase("fancyvec")) style = ImageProducer.Style.FANCYVEC;
             else if (styleType.equalsIgnoreCase("linevec")) style = ImageProducer.Style.LINEVEC;
             else if (styleType.equalsIgnoreCase("stumpvec")) style = ImageProducer.Style.STUMPVEC;
@@ -485,7 +477,7 @@ public abstract class AbstractWmsController extends AbstractController {
                                    " does not support partially-transparent pixels");
 
         ImageProducer imageProducer = new ImageProducer.Builder()
-            .layerGrid(layerGrid)
+            .layerGrid(mapGrid)
             .imageGrid(imageGrid)
             .style(style)
             .palette(palette)
@@ -498,6 +490,7 @@ public abstract class AbstractWmsController extends AbstractController {
             .opacity(styleRequest.getOpacity())
             .numColorBands(styleRequest.getNumColorBands())
             .numContours(styleRequest.getNumContours())
+            .vectorScale(styleRequest.getVectorScale())
             .build();
 
         double zValue = getElevationValue(dataRequest.getElevationString(), layer);
@@ -520,18 +513,15 @@ public abstract class AbstractWmsController extends AbstractController {
                 tValueStr = WmsUtils.dateTimeToISO8601(timeValue);
             }
             tValueStrings.add(tValueStr);
-            MapGrid mapgrid = new MapGridImpl(imageGrid.getExtent(),
-                    layerGrid.getGridExtent().getSpan(0),
-                    layerGrid.getGridExtent().getSpan(1));
             if (layer instanceof ScalarLayer) {
                 // Note that if the layer doesn't have a time axis, timeValue==null but this
                 // will be ignored by readHorizontalPoints()
                 ScalarLayer scaLayer = (ScalarLayer) layer;
-                List<Float> data = scaLayer.readHorizontalPoints(timeValue, zValue, mapgrid);
+                List<Float> data = scaLayer.readHorizontalPoints(timeValue, zValue, mapGrid);
                 imageProducer.addFrame(data, tValueStr);
             } else if (layer instanceof VectorLayer) {
                 VectorLayer vecLayer = (VectorLayer)layer;
-                List<Float>[] xyVals = vecLayer.readXYComponents(timeValue, zValue, mapgrid);
+                List<Float>[] xyVals = vecLayer.readXYComponents(timeValue, zValue, mapGrid);
                 imageProducer.addFrame(xyVals[0], xyVals[1], tValueStr);
             } else {
                 throw new IllegalStateException("Unrecognized layer type");

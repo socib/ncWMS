@@ -271,31 +271,49 @@ public class WmsUtils
     /**
      * Calculates the magnitude of the vector components given in the provided
      * Lists.  The two lists must be of the same length.  For any element in the
-     * component lists, if either east or north is null, the magnitude will also
+     * component lists, if either component null, the magnitude will also
      * be null.
      * @return a List of the magnitudes calculated from the components.
      */
-    public static List<Float> getMagnitudes(List<Float> eastData, List<Float> northData)
+    public static List<Float> getMagnitudes(List<Float> xData, List<Float> yData)
     {
-        if (eastData == null || northData == null) throw new NullPointerException();
-        if (eastData.size() != northData.size())
+        if (xData.size() != yData.size())
+            throw new IllegalArgumentException("data components must be the same length");
+        List<Float> rData = new ArrayList<Float>(xData.size());
+        for (int i = 0; i < xData.size(); i++)
         {
-            throw new IllegalArgumentException("east and north data components must be the same length");
+            Float x = xData.get(i);
+            Float y = yData.get(i);
+            Float r = null;
+            if (x != null && y != null)
+                r = (float) Math.sqrt(x * x + y * y);
+            rData.add(r);
         }
-        List<Float> mag = new ArrayList<Float>(eastData.size());
-        for (int i = 0; i < eastData.size(); i++)
+        return rData;
+    }
+    
+    /**
+     * Calculates the angle of the vectors with components given in the provided
+     * Lists.  The two lists must be of the same length.  For any element in the
+     * component lists, if either component is null, the angle will also
+     * be null.
+     * @return a List of the angles calculated from the components.
+     */
+    public static List<Float> getAngles(List<Float> xData, List<Float> yData)
+    {
+        if (xData.size() != yData.size())
+            throw new IllegalArgumentException("data components must be the same length");
+        List<Float> aData = new ArrayList<Float>(xData.size());
+        for (int i = 0; i < xData.size(); i++)
         {
-            Float east = eastData.get(i);
-            Float north = northData.get(i);
-            Float val = null;
-            if (east != null && north != null)
-            {
-                val = (float)Math.sqrt(east * east + north * north);
-            }
-            mag.add(val);
+            Float x = xData.get(i);
+            Float y = yData.get(i);
+            Float a = null;
+            if (x != null && y != null)
+                a = (float) Math.atan2(y, x);
+            aData.add(a);
         }
-        if (mag.size() != eastData.size()) throw new AssertionError();
-        return mag;
+        return aData;
     }
     
     /**
@@ -443,7 +461,7 @@ public class WmsUtils
                     components.put(vectorKey, new ScalarLayer[2]);
                 }
                 components.get(vectorKey)[0] = layer;
-                realNorthEasts.put(vectorKey, false);
+                realNorthEasts.put(vectorKey, true);
             } else if (layer.getTitle().contains("Meridional ")) {
                 String vectorKey = layer.getTitle().replaceFirst("Meridional ", "").trim();
                 // Look to see if we've already found this component
@@ -452,7 +470,7 @@ public class WmsUtils
                     components.put(vectorKey, new ScalarLayer[2]);
                 }
                 components.get(vectorKey)[1] = layer;
-                realNorthEasts.put(vectorKey, false);
+                realNorthEasts.put(vectorKey, true);
             }
         }
 

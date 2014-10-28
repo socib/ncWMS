@@ -46,7 +46,7 @@ import uk.ac.rdg.resc.ncwms.graphics.ColorMap;
  */
 public class GetMapStyleRequest
 {
-    private String[] styles;
+    private String[] styles;              // Image style and palette.
     private String imageFormat;           // Image format's MIME type.
     private boolean transparent;          // Use transparent background.
     private Color backgroundColor;        // Background color.
@@ -55,9 +55,9 @@ public class GetMapStyleRequest
     private int opacity;                  // Opacity of the image in the range [0,100]
     private int numColorBands;            // Number of color bands to use in the image
     private int numContours;              // Number of contours to use in the image
+    private float vectorScale;            // The scale of the markers for vector plots.
     private Boolean logarithmic;          // True if we're using a log scale, false if linear and null if not specified
     private Range<Float> colorScaleRange; // The limits of the color scale. 
-
     
     /**
      * Creates a new instance of GetMapStyleRequest from the given parameters
@@ -72,14 +72,19 @@ public class GetMapStyleRequest
         this.belowMinColor = getBelowMinColor(params);
         this.aboveMaxColor = getAboveMaxColor(params);
         this.opacity = getOpacity(params);
-        this.colorScaleRange = getColorScaleRange(params);
         this.numColorBands = getNumColorBands(params);
         this.numContours = getNumContours(params);
+        this.vectorScale = getVectorScale(params);
+        this.colorScaleRange = getColorScaleRange(params);
         this.logarithmic = isLogScale(params);
     }
-    
+
     /**
-     * Gets the list of styles requested by the client
+     * Extract the list of styles from the request parameters.
+     * The expected value is a comma-separated-list of names of styles.
+     * @param params the request parameters.
+     * @return the list of the names of the styles in the request.
+     * @throws WmsException if there is no style parameter.
      */
     public static String[] getStyles(RequestParams params) throws WmsException
     {
@@ -91,22 +96,49 @@ public class GetMapStyleRequest
             styles = stylesStr.split(",");
         return styles;
     }
-    
+
+    /**
+     * Extract the MIME type of the image format from the request parameters.
+     * @param params the request parameters.
+     * @return the name of MIME type of the image format.
+     * @throws WmsException if there is no format parameter.
+     */
     public static String getImageFormat(RequestParams params) throws WmsException
     {
         return params.getMandatoryString("format").replaceAll(" ", "+");
     }
-    
+
+    /**
+     * Extract the transparent flag from the request parameters (default false).
+     * @param params the request parameters.
+     * @return whether the background should be transparent.
+     * @throws WmsException if the parameter value is invalid.
+     */
     public static boolean isTransparent(RequestParams params) throws WmsException
     {
         return params.getBoolean("transparent", false);
     }
-    
+
+    /**
+     * Extract the background color from the request parameters (default white).
+     * @param params the request parameters.
+     * @return whether the background should be transparent.
+     * @throws WmsException if the parameter value is invalid.
+     */
     public static Color getBackgroundColor(RequestParams params) throws WmsException
     {
         return params.getColor("bgcolor", Color.WHITE);
     }
-    
+
+    /**
+     * Extract the color for low data from the request parameters (default black).
+     * The expected values is a color name or code, or one of these values:
+     *   "extend": return null (the lowest value in the color map will be used).
+     *   "transparent": return a fully transparent black color instance.
+     * @param params the request parameters.
+     * @return the color to use for low data, or null for an extended color map.
+     * @throws WmsException if the parameter value is invalid.
+     */
     public static Color getBelowMinColor(RequestParams params) throws WmsException
     {
         String belowMinColorStr = params.getString("belowmincolor");
@@ -118,7 +150,16 @@ public class GetMapStyleRequest
             return params.getColor("belowmincolor", Color.black);
         }
     }
-    
+
+    /**
+     * Extract the color for high data from the request parameters (default black).
+     * The expected values is a color name or code, or one of these values:
+     *   "extend": return null (the lowest value in the color map will be used).
+     *   "transparent": return a fully transparent black color instance.
+     * @param params the request parameters.
+     * @return the color to use for high data, or null for an extended color map.
+     * @throws WmsException if the parameter value is invalid.
+     */
     public static Color getAboveMaxColor(RequestParams params) throws WmsException
     {
         String aboveMaxColorStr = params.getString("abovemaxcolor");
@@ -130,7 +171,13 @@ public class GetMapStyleRequest
             return params.getColor("abovemaxcolor", Color.black);
         }
     }
-    
+
+    /**
+     * Extract the opacity factor from the request parameters (default 100, fully opaque).
+     * @param params the request parameters.
+     * @return the opacity factor truncated to the range [0, 100].
+     * @throws WmsException if the parameter value is invalid.
+     */
     public static int getOpacity(RequestParams params) throws WmsException
     {
         int opacity = params.getPositiveInt("opacity", 100);
@@ -139,7 +186,13 @@ public class GetMapStyleRequest
     }
 
     /**
-     * Gets the ColorScaleRange object requested by the client
+     * Extract the range of the color scale from the request parameters.
+     * The expected value is a range, or one of these values:
+     *   "default": use the default scale range for the layer.
+     *   "auto": adjust the color scale to the range of the data in the image.
+     * @param params the request parameters.
+     * @return the color scale range, an empty range for auto-scale or null for default range for the layer.
+     * @throws WmsException if the parameter value is invalid.
      */
     public static Range<Float> getColorScaleRange(RequestParams params) throws WmsException
     {
@@ -162,10 +215,11 @@ public class GetMapStyleRequest
     }
 
     /**
-     * Gets the number of color bands requested by the client, or {@link ColorPalette#MAX_NUM_COLOURS} if none
-     * has been set or the requested number was bigger than {@link ColorPalette#MAX_NUM_COLOURS}.
-     * @throws WmsException if the client requested a negative number of color
-     * bands
+     * Extract the number of bands of the color map from the request parameters.
+     * The requested number of bands is truncated to the maximum number allowed.
+     * @param params the request parameters.
+     * @return the number of color bands (default to maximum number allowed).
+     * @throws WmsException if the parameter value is invalid.
      */
     public static int getNumColorBands(RequestParams params) throws WmsException
     {
@@ -174,13 +228,12 @@ public class GetMapStyleRequest
             numColorBands = ColorMap.MAX_NUM_COLORS;
         return numColorBands;
     }
-    
+
     /**
-     * Gets the number of contours requested by the client, or 10 if none
-     * has been set or the requested number was less than 2.
-     * @param params The RequestParams object from the client.
-     * @return the requested number of contours
-     * @throws WmsException if the client requested a negative number of contours
+     * Extract the number of contours from the request parameters.
+     * @param params the request parameters.
+     * @return the number of contour levels (default 10).
+     * @throws WmsException if the parameter value is invalid.
      */
     public static int getNumContours(RequestParams params) throws WmsException
     {
@@ -189,13 +242,12 @@ public class GetMapStyleRequest
             numContours = 10;
         return numContours;
     }
-    
+
     /**
-     * Returns {@link Boolean#TRUE} if the client has requested a logarithmic scale,
-     * {@link Boolean#FALSE} if the client has requested a linear scale,
-     * or null if the client did not specify.
-     * @throws WmsException if the client specified a value that is not
-     * "true" or "false" (case not important).
+     * Extract the logarithmic flag from the request parameters.
+     * @param params the request parameters.
+     * @return whether the scale is logarithmic or not, or null to use the default value for the layer.
+     * @throws WmsException if the parameter value is invalid.
      */
     public static Boolean isLogScale(RequestParams params) throws WmsException
     {
@@ -207,8 +259,18 @@ public class GetMapStyleRequest
     }
 
     /**
-     * Returns the array of style names in comma-separated-list parameter STYLES,
-     * or an empty array if the user specified "STYLES=".
+     * Extract the scale of vector markers from the request parameters.
+     * @param params the request parameters.
+     * @return the requested vector scale, or the default value 14.0.
+     * @throws WmsException if the parameter value is invalid.
+     */
+    public static float getVectorScale(RequestParams params) throws WmsException
+    {
+        return params.getFloat("vectorscale", 14.0f);
+    }
+
+    /**
+     * Get the array of style names requested by the client.
      */
     public String[] getStyles()
     {
@@ -216,7 +278,7 @@ public class GetMapStyleRequest
     }
 
     /**
-     * Returns the MIME type given in parameters.
+     * Get the MIME type of the image format requested by the client.
      */
     public String getImageFormat()
     {
@@ -224,57 +286,82 @@ public class GetMapStyleRequest
     }
 
     /**
-     * Returns {@link Boolean#TRUE} if the client has requested a logarithmic scale,
-     * {@link Boolean#FALSE} if the client has requested a linear scale,
-     * or null if the client did not specify.
+     * Get the scale type requested by the client.
      */
     public Boolean isScaleLogarithmic()
     {
         return logarithmic;
     }
 
+    /**
+     * Get the transparent background choice requested by the client.
+     */
     public boolean isTransparent()
     {
         return transparent;
     }
 
+    /**
+     * Get the background color choice requested by the client.
+     */
     public Color getBackgroundColor()
     {
         return backgroundColor;
     }
-    
 
-    public Color getBelowMinColor() {
+    /**
+     * Get the low color choice requested by the client.
+     */
+    public Color getBelowMinColor()
+    {
         return belowMinColor;
     }
 
-    public Color getAboveMaxColor() {
+    /**
+     * Get the high color choice requested by the client.
+     */
+    public Color getAboveMaxColor()
+    {
         return aboveMaxColor;
     }
 
+    /**
+     * Get the opacity factor requested by the client.
+     */
     public int getOpacity()
     {
         return opacity;
     }
 
     /**
-     * Gets the values that will correspond with the extremes of the colour 
-     * scale.  Returns null if the client has not specified a scale range or
-     * if the default scale range is to be used.  Returns an empty Range if
-     * the client wants the image to be auto-scaled according to the image's own
-     * min and max values.
+     * Get the color scale range requested by the client.
      */
     public Range<Float> getColorScaleRange()
     {
         return colorScaleRange;
     }
 
+    /**
+     * Get the number of color bands requested by the client.
+     */
     public int getNumColorBands()
     {
         return numColorBands;
     }
-    
+
+    /**
+     * Get the number of contour levels requested by the client.
+     */
     public int getNumContours() {
         return numContours;
     }
+
+    /**
+     * Get the scale of vector markers requested by the client.
+     */
+    public float getVectorScale()
+    {
+        return vectorScale;
+    }
+
 }
