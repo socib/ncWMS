@@ -42,7 +42,11 @@ import org.joda.time.Period;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.servlet.ModelAndView;
+
+import uk.ac.rdg.resc.edal.coverage.grid.HorizontalGrid;
+import uk.ac.rdg.resc.edal.coverage.grid.MapGrid;
 import uk.ac.rdg.resc.edal.coverage.grid.RegularGrid;
+import uk.ac.rdg.resc.edal.coverage.grid.impl.MapGridImpl;
 import uk.ac.rdg.resc.edal.util.Range;
 import uk.ac.rdg.resc.edal.util.Ranges;
 import uk.ac.rdg.resc.ncwms.controller.AbstractWmsController.LayerFactory;
@@ -285,7 +289,9 @@ public abstract class AbstractMetadataController
         usageLogEntry.setLayer(layer);
         
         // Get the grid onto which the data is being projected
-        RegularGrid grid = WmsUtils.getImageGrid(dr);
+        RegularGrid imageGrid = WmsUtils.getImageGrid(dr);
+        HorizontalGrid layerGrid = layer.getHorizontalGrid();
+        MapGrid mapGrid = new MapGridImpl(layerGrid, imageGrid);
         
         // Get the value on the z axis
         double zValue = AbstractWmsController.getElevationValue(dr.getElevationString(), layer);
@@ -298,14 +304,14 @@ public abstract class AbstractMetadataController
         List<Float> magnitudes;
         if (layer instanceof ScalarLayer)
         {
-            magnitudes = ((ScalarLayer)layer).readHorizontalPoints(tValue, zValue, grid);
+            ScalarLayer scalarLayer = (ScalarLayer) layer;
+            magnitudes = scalarLayer.readHorizontalPoints(tValue, zValue, mapGrid);
         }
         else if (layer instanceof VectorLayer)
         {
-            VectorLayer vecLayer = (VectorLayer)layer;
-            List<Float> east = vecLayer.getXComponent().readHorizontalPoints(tValue, zValue, grid);
-            List<Float> north = vecLayer.getYComponent().readHorizontalPoints(tValue, zValue, grid);
-            magnitudes = WmsUtils.getMagnitudes(east, north);
+            VectorLayer vectorLayer = (VectorLayer) layer;
+            List<Float>[] xyVals = vectorLayer.readXYComponents(tValue, zValue, imageGrid);
+            magnitudes = WmsUtils.getMagnitudes(xyVals[0], xyVals[1]);
         }
         else
         {
