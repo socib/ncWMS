@@ -53,6 +53,7 @@ import uk.ac.rdg.resc.edal.util.Range;
 import uk.ac.rdg.resc.edal.util.Ranges;
 import uk.ac.rdg.resc.ncwms.exceptions.WmsException;
 import uk.ac.rdg.resc.ncwms.graphics.plot.BoxfillPlot;
+import uk.ac.rdg.resc.ncwms.graphics.plot.ColorMap;
 import uk.ac.rdg.resc.ncwms.graphics.plot.ContourPlot;
 import uk.ac.rdg.resc.ncwms.graphics.plot.Label;
 import uk.ac.rdg.resc.ncwms.graphics.plot.MarkerPlot;

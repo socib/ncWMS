@@ -26,10 +26,12 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package uk.ac.rdg.resc.ncwms.graphics;
+package uk.ac.rdg.resc.ncwms.graphics.plot;
 
 import java.awt.Color;
 import java.awt.image.IndexColorModel;
+
+import uk.ac.rdg.resc.ncwms.graphics.ColorPalette;
 
 
 /**
@@ -52,7 +54,7 @@ public class ColorMap
      * typical scenario anyway.)
      */
     public static final int MAX_NUM_COLORS = 253;
-
+    
     private ColorPalette palette = null;
     private int numColorBands = MAX_NUM_COLORS;
     private Color undefValColor = new Color(0, 0, 0, 0);
@@ -73,6 +75,7 @@ public class ColorMap
     private int belowMinColorIndex;
     private int aboveMaxColorIndex;
     
+    private IndexColorModel colorModel;
     
     /**
      * Create a new color map with default color scheme and default scale.
@@ -294,11 +297,11 @@ public class ColorMap
      * @param value value to map.
      * @return index of the color in the color map the value maps to, or -1.
      */
-    public int getColorIndex(float value)
+    public int getColorIndex(double value)
     {
         int i = undefValColorIndex;
-        float v = logScale ? (float) Math.log(value) : value;
-        if (! Float.isNaN(v))
+        double v = logScale ? Math.log(value) : value;
+        if (! Double.isNaN(v))
         {
             v -= offset;
             v /= extent;
@@ -323,7 +326,7 @@ public class ColorMap
      * @param value value to map.
      * @return color corresponding to the given value or null.
      */
-    public Color getColorValue(float value)
+    public Color getColorValue(double value)
     {
         int i = getColorIndex(value);
         return (i < 0) ? null : colors[i];
@@ -444,6 +447,8 @@ public class ColorMap
             colors[aboveMaxColorIndex] = new Color(
                     aboveMaxColor.getRed(), aboveMaxColor.getGreen(), aboveMaxColor.getBlue(),
                     (int) Math.round(opacity * aboveMaxColor.getAlpha()));
+        
+        colorModel = null;
     }
     
     
@@ -464,12 +469,10 @@ public class ColorMap
         }
     }
     
-    
     /**
-     * Create an IndexColorModel based on this color map.
-     * @return a 8-bit indexed color model with the colors in the color map.
+     * Update the internal cached color model.
      */
-    public IndexColorModel getColorModel()
+    private void updateColorModel()
     {
         int length = colors.length;
         byte[] r = new byte[length];
@@ -484,7 +487,17 @@ public class ColorMap
             b[i] = (byte) color.getBlue();
             a[i] = (byte) color.getAlpha();
         }
-        return new IndexColorModel(8, length, r, g, b, a);
+        colorModel = new IndexColorModel(8, length, r, g, b, a);
+    }
+    /**
+     * Get the indexed color model based on this color map.
+     * @return a 8-bit indexed color model with the colors in the color map.
+     */
+    public IndexColorModel getColorModel()
+    {
+        if (colorModel == null)
+            updateColorModel();
+        return colorModel;
     }
     
     
