@@ -282,4 +282,9 @@ final class LayerImpl extends AbstractTimeAggregatedLayer
 
         return data;
     }
+
+    @Override
+    public boolean isIntervalTime() {
+        return this.dataset.isIntervalTime();
+    }
 }

@@ -31,7 +31,6 @@ package uk.ac.rdg.resc.ncwms.controller;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.geom.Ellipse2D;
-import java.awt.image.IndexColorModel;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
@@ -76,6 +75,7 @@ import uk.ac.rdg.resc.edal.geometry.impl.LineString;
 import uk.ac.rdg.resc.edal.util.Range;
 import uk.ac.rdg.resc.edal.util.Utils;
 import uk.ac.rdg.resc.ncwms.graphics.ColorPalette;
+import uk.ac.rdg.resc.ncwms.graphics.plot.ColorMap;
 import uk.ac.rdg.resc.ncwms.util.WmsUtils;
 import uk.ac.rdg.resc.ncwms.wms.Layer;
 
@@ -144,7 +144,6 @@ public class Charting
         
         return chart;
     }
-    
     
     public static JFreeChart createMultiTimeseriesPlot(List<Map<DateTime, Float>> tsData,
             List<String> labels, String variableUnit) {
@@ -301,8 +300,6 @@ public class Charting
         // Use default font and don't create a legend
         return new JFreeChart(title, null, plot, true);        
     }
-    
-    
 
     public static JFreeChart createVerticalProfilePlot(Layer layer, HorizontalPosition pos,
             List<Double> elevationValues, List<Float> dataValues, DateTime dateTime)
@@ -512,10 +509,6 @@ public class Charting
 
         return new ZAxisAndValues(zAxis, elevationValues);
     }
-    
-    
-    
-    
 
     /**
      * Creates and returns a vertical section chart.
@@ -724,68 +717,17 @@ public class Charting
             final Range<Float> colourScaleRange, final int numColourBands,
             final boolean logarithmic)
     {
-        final IndexColorModel cm = colorPalette.getColorModel(numColourBands, 100,
-                Color.white, Color.black, Color.black, true);
-
+        final ColorMap cm = new ColorMap(colorPalette.getColors(), numColourBands,
+                                         Color.WHITE, Color.BLACK, Color.BLACK,
+                                         true, false, false, 1.0f,
+                                         colourScaleRange.getMinimum(),
+                                         colourScaleRange.getMaximum(),
+                                         logarithmic);
         return new PaintScale()
         {
-            @Override
-            public double getLowerBound() {
-                return colourScaleRange.getMinimum();
-            }
-
-            @Override
-            public double getUpperBound() {
-                return colourScaleRange.getMaximum();
-            }
-
-            @Override
-            public Color getPaint(double value) {
-                // TODO: replicate/factor out code in ImageProducer.java
-                int index = this.getColourIndex(value);
-                return new Color(cm.getRGB(index));
-            }
-
-            /**
-             * @return the colour index that corresponds to the given value
-             * @todo This is adapted from ImageProducer.
-             */
-            private int getColourIndex(double value)
-            {
-                if (Double.isNaN(value)) {
-                    return numColourBands; // represents a background pixel
-                } else if (value < this.getLowerBound()) {
-                    /*
-                     * represents a low out-of-range pixel
-                     */
-                    return numColourBands + 1; 
-                } else if (value > this.getUpperBound()) {
-                    /*
-                     * represents a high out-of-range pixel
-                     */
-                    return numColourBands + 2; 
-                } else {
-                    double min = logarithmic ? Math.log(this.getLowerBound()) : this
-                            .getLowerBound();
-                    double max = logarithmic ? Math.log(this.getUpperBound()) : this
-                            .getUpperBound();
-                    double val = logarithmic ? Math.log(value) : value;
-                    double frac = (val - min) / (max - min);
-                    // Compute and return the index of the corresponding colour
-                    int index = (int) (frac * numColourBands);
-                    // For values very close to the maximum value in the range,
-                    // this
-                    // index might turn out to be equal to this.numColourBands
-                    // due to
-                    // rounding error. In this case we subtract one from the
-                    // index to
-                    // ensure that such pixels are not displayed as background
-                    // pixels.
-                    if (index == numColourBands)
-                        index--;
-                    return index;
-                }
-            }
+            @Override public double getLowerBound() {return cm.getScaleMin();}
+            @Override public double getUpperBound() {return cm.getScaleMax();}
+            @Override public Color getPaint(double value) {return cm.getColorValue((float) value);}
         };
     }
 

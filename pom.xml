@@ -125,12 +125,13 @@
       <scope>provided</scope>
     </dependency>
 
-    <dependency>
+    <!-- dependency>
     	<groupId>javax.servlet</groupId>
     	<artifactId>javax.servlet-api</artifactId>
     	<version>3.0.1</version>
       <scope>provided</scope>
-    </dependency>
+    </dependency -->
+
     <dependency>
       <groupId>javax.servlet</groupId>
       <artifactId>jstl</artifactId>
@@ -253,12 +254,6 @@
       <version>4.5</version>
       <scope>test</scope>
     </dependency>
-    
-    <dependency>
-      <groupId>gov.noaa.pmel</groupId>
-      <artifactId>SGT_toolkit</artifactId>
-      <version>3.0</version>
-    </dependency>    
 
     <!-- ========== Needed for standalone ncWMS not for TDS/ncWMS. ========== -->
 
