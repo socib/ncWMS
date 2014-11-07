@@ -51,7 +51,6 @@ import uk.ac.rdg.resc.edal.coverage.grid.HorizontalGrid;
 import uk.ac.rdg.resc.edal.geometry.HorizontalPosition;
 import uk.ac.rdg.resc.edal.util.Range;
 import uk.ac.rdg.resc.edal.util.Ranges;
-import uk.ac.rdg.resc.ncwms.exceptions.StyleNotDefinedException;
 import uk.ac.rdg.resc.ncwms.exceptions.WmsException;
 import uk.ac.rdg.resc.ncwms.graphics.plot.ColorMap;
 import uk.ac.rdg.resc.ncwms.graphics.plot.ContourPlot;
@@ -579,7 +578,6 @@ public final class ImageProducer
         private ImageStyle style = null;
         private float vectorScale = 14.0f;
         private int numContours = 10;
-        private int equator_y_index = 0;
 
         /** Sets map grid (contains the size of the picture and the CRS) */
         public Builder imageGrid(HorizontalGrid imageGrid)
@@ -667,14 +665,6 @@ public final class ImageProducer
             return this;
         }
 
-        /** Sets the yindex that the hemisphere switches to southern value is 0
-         * if it does not touch the southern hemisphere.
-         */
-        public Builder equator_y_index(int equator_y_index)
-        {
-            this.equator_y_index = equator_y_index;
-            return this;
-        }
 
         /** Sets the number of contours to use in the image, from 2 (default 10) */
         public Builder numContours(int numContours)
@@ -726,7 +716,6 @@ public final class ImageProducer
             ip.layerGrid = this.layerGrid;
             ip.imageGrid = this.imageGrid;
             ip.vectorScale = this.vectorScale;
-            ip.equator_y_index = this.equator_y_index;
             ip.numContours = this.numContours;
             ip.style = this.style;
             ip.colorMap = new ColorMap(
