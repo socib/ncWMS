@@ -86,6 +86,7 @@ import uk.ac.rdg.resc.ncwms.exceptions.WmsException;
 import uk.ac.rdg.resc.ncwms.graphics.ColorPalette;
 import uk.ac.rdg.resc.ncwms.graphics.ImageFormat;
 import uk.ac.rdg.resc.ncwms.graphics.ImageProducer;
+import uk.ac.rdg.resc.ncwms.graphics.ImageStyle;
 import uk.ac.rdg.resc.ncwms.graphics.KmzFormat;
 import uk.ac.rdg.resc.ncwms.usagelog.UsageLogEntry;
 import uk.ac.rdg.resc.ncwms.usagelog.UsageLogger;
@@ -340,13 +341,21 @@ public abstract class AbstractWmsController extends AbstractController {
             "EPSG:32661", // North Polar stereographic
             "EPSG:32761" // South Polar stereographic
         };
+        // Compute the available styles for scalar and vector layers:
+        Set<String> vectorStyleNames = new HashSet<String>(ImageStyle.getAvailableStyleNames());
+        Set<String> scalarStyleNames = new HashSet<String>();
+        for (String styleName : vectorStyleNames)
+            if (! ImageStyle.get(styleName).isMarker())
+                scalarStyleNames.add(styleName);
         models.put("supportedCrsCodes", supportedCrsCodes); //*/HorizontalGrid.SUPPORTED_CRS_CODES);
         models.put("supportedImageFormats", ImageFormat.getSupportedMimeTypes());
         models.put("layerLimit", LAYER_LIMIT);
         models.put("featureInfoFormats", new String[]{FEATURE_INFO_PNG_FORMAT,
-                    FEATURE_INFO_XML_FORMAT});
+                                                      FEATURE_INFO_XML_FORMAT});
         models.put("legendWidth", ImageProducer.LEGEND_WIDTH);
         models.put("legendHeight", ImageProducer.LEGEND_HEIGHT);
+        models.put("scalarStyleNames", scalarStyleNames);
+        models.put("vectorStyleNames", vectorStyleNames);
         models.put("paletteNames", ColorPalette.getAvailablePaletteNames());
         models.put("verboseTimes", verboseTimes);
 
@@ -403,13 +412,20 @@ public abstract class AbstractWmsController extends AbstractController {
         usageLogEntry.setGetMapRequest(getMapRequest);
 
         GetMapStyleRequest styleRequest = getMapRequest.getStyleRequest();
+        GetMapDataRequest dataRequest = getMapRequest.getDataRequest();
 
         // Get the ImageFormat object corresponding with the requested MIME type
         String mimeType = styleRequest.getImageFormat();
         // This throws an InvalidFormatException if the MIME type is not supported
         ImageFormat imageFormat = ImageFormat.get(mimeType);
 
-        GetMapDataRequest dataRequest = getMapRequest.getDataRequest();
+        // Ensure that the images will be compatible with the requested image format.s
+        if (styleRequest.isTransparent() && !imageFormat.supportsFullyTransparentPixels())
+            throw new WmsException("The image format " + mimeType +
+                                   " does not support fully-transparent pixels");
+        if (styleRequest.getOpacity() < 100 && !imageFormat.supportsPartiallyTransparentPixels())
+            throw new WmsException("The image format " + mimeType +
+                                   " does not support partially-transparent pixels");
 
         // Check the dimensions of the image
         if (dataRequest.getHeight() > this.serverConfig.getMaxImageHeight() ||
@@ -435,47 +451,18 @@ public abstract class AbstractWmsController extends AbstractController {
         Boolean logScale = styleRequest.isScaleLogarithmic();
         if (logScale == null)
             logScale = layer.isLogScaling();
-        ImageProducer.Style style = layer instanceof VectorLayer
-                ? ImageProducer.Style.VECTOR
-                : ImageProducer.Style.BOXFILL;
-        ColorPalette palette = layer.getDefaultColorPalette();
         String[] styles = styleRequest.getStyles();
-        if (styles.length > 0) {
+        String styleName = null;
+        String paletteName = null;
+        if (styles.length > 0)
+        {
             String[] styleStrEls = styles[0].split("/");
-
-            // Get the style type
-            String styleType = styleStrEls[0];
-            if (styleType.equalsIgnoreCase("boxfill")) style = ImageProducer.Style.BOXFILL;
-            else if (styleType.equalsIgnoreCase("vector")) style = ImageProducer.Style.VECTOR;
-            //else if (styleType.equalsIgnoreCase("arrows")) style = ImageProducer.Style.ARROWS;
-            else if (styleType.equalsIgnoreCase("barb")) style = ImageProducer.Style.BARB;
-            else if (styleType.equalsIgnoreCase("contour")) style = ImageProducer.Style.CONTOUR;
-            else if (styleType.equalsIgnoreCase("fancyvec")) style = ImageProducer.Style.FANCYVEC;
-            else if (styleType.equalsIgnoreCase("linevec")) style = ImageProducer.Style.LINEVEC;
-            else if (styleType.equalsIgnoreCase("stumpvec")) style = ImageProducer.Style.STUMPVEC;
-            else if (styleType.equalsIgnoreCase("trivec")) style = ImageProducer.Style.TRIVEC;           
-            else throw new StyleNotDefinedException("The style " + styles[0] +
-                " is not supported by this server");
-
-            // Now get the colour palette
-            String paletteName = null;
-            if (styleStrEls.length > 1) paletteName = styleStrEls[1];
-            palette = ColorPalette.get(paletteName);
-            if (palette == null) {
-                throw new StyleNotDefinedException("There is no palette with the name "
-                    + paletteName);
-            }
+            styleName = styleStrEls[0];
+            if (styleStrEls.length > 1)
+                paletteName = styleStrEls[1];
         }
-        
-        // Need to make sure that the images will be compatible with the
-        // requested image format
-        if (styleRequest.isTransparent() && !imageFormat.supportsFullyTransparentPixels())
-            throw new WmsException("The image format " + mimeType +
-                                   " does not support fully-transparent pixels");
-        if (styleRequest.getOpacity() < 100 && !imageFormat.supportsPartiallyTransparentPixels())
-            throw new WmsException("The image format " + mimeType +
-                                   " does not support partially-transparent pixels");
-
+        ImageStyle style = ImageStyle.get(styleName);
+        ColorPalette palette = ColorPalette.get(paletteName);
         ImageProducer imageProducer = new ImageProducer.Builder()
             .layerGrid(mapGrid)
             .imageGrid(imageGrid)
@@ -516,12 +503,12 @@ public abstract class AbstractWmsController extends AbstractController {
             if (layer instanceof ScalarLayer) {
                 // Note that if the layer doesn't have a time axis, timeValue==null but this
                 // will be ignored by readHorizontalPoints()
-                ScalarLayer scaLayer = (ScalarLayer) layer;
-                List<Float> data = scaLayer.readHorizontalPoints(timeValue, zValue, mapGrid);
+                ScalarLayer scalarLayer = (ScalarLayer) layer;
+                List<Float> data = scalarLayer.readHorizontalPoints(timeValue, zValue, mapGrid);
                 imageProducer.addFrame(data, tValueStr);
             } else if (layer instanceof VectorLayer) {
-                VectorLayer vecLayer = (VectorLayer)layer;
-                List<Float>[] xyVals = vecLayer.readXYComponents(timeValue, zValue, mapGrid);
+                VectorLayer vectorLayer = (VectorLayer)layer;
+                List<Float>[] xyVals = vectorLayer.readXYComponents(timeValue, zValue, mapGrid);
                 imageProducer.addFrame(xyVals[0], xyVals[1], tValueStr);
             } else {
                 throw new IllegalStateException("Unrecognized layer type");

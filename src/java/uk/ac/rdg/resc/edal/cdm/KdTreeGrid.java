@@ -28,40 +28,23 @@
 
 package uk.ac.rdg.resc.edal.cdm;
 
-import java.awt.Color;
-import java.awt.Graphics2D;
-import java.awt.geom.AffineTransform;
-import java.awt.geom.Path2D;
-import java.awt.image.BufferedImage;
-import java.awt.image.IndexColorModel;
-import java.io.File;
-import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
-import uk.ac.rdg.resc.edal.coverage.grid.GridCoordinates;
-import uk.ac.rdg.resc.edal.geometry.LonLatPosition;
 import java.util.Map;
 import java.util.Set;
-import javax.imageio.ImageIO;
-import org.opengis.metadata.extent.GeographicBoundingBox;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import ucar.nc2.dataset.NetcdfDataset;
+
 import ucar.nc2.dt.GridCoordSystem;
-import ucar.nc2.dt.GridDatatype;
 import uk.ac.rdg.resc.edal.cdm.CurvilinearGrid.Cell;
 import uk.ac.rdg.resc.edal.cdm.kdtree.KDTree;
 import uk.ac.rdg.resc.edal.cdm.kdtree.Point;
-import uk.ac.rdg.resc.edal.coverage.grid.HorizontalGrid;
+import uk.ac.rdg.resc.edal.coverage.grid.GridCoordinates;
 import uk.ac.rdg.resc.edal.coverage.grid.impl.GridCoordinatesImpl;
-import uk.ac.rdg.resc.edal.coverage.grid.impl.RegularGridImpl;
+import uk.ac.rdg.resc.edal.geometry.LonLatPosition;
 import uk.ac.rdg.resc.edal.geometry.impl.LonLatPositionImpl;
 import uk.ac.rdg.resc.edal.util.CollectionUtils;
-import uk.ac.rdg.resc.edal.util.Range;
-import uk.ac.rdg.resc.edal.util.Ranges;
-import uk.ac.rdg.resc.ncwms.graphics.ColorPalette;
-import uk.ac.rdg.resc.ncwms.graphics.ImageProducer;
-import uk.ac.rdg.resc.ncwms.graphics.ImageProducer.Style;
 
 /**
  * A HorizontalGrid that uses an KdTree to look up the nearest neighbour of a point.

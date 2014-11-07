@@ -30,9 +30,12 @@ package uk.ac.rdg.resc.ncwms.controller;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import org.joda.time.DateTime;
@@ -53,6 +56,7 @@ import uk.ac.rdg.resc.ncwms.controller.AbstractWmsController.LayerFactory;
 import uk.ac.rdg.resc.ncwms.exceptions.LayerNotDefinedException;
 import uk.ac.rdg.resc.ncwms.exceptions.MetadataException;
 import uk.ac.rdg.resc.ncwms.graphics.ColorPalette;
+import uk.ac.rdg.resc.ncwms.graphics.ImageStyle;
 import uk.ac.rdg.resc.ncwms.usagelog.UsageLogEntry;
 import uk.ac.rdg.resc.ncwms.util.WmsUtils;
 import uk.ac.rdg.resc.ncwms.wms.Layer;
@@ -196,6 +200,17 @@ public abstract class AbstractMetadataController
             if (!days.contains(day)) days.add(day);
         }
         
+        // Compute the available styles for scalar and vector layers:
+        Set<String> styleNames = ImageStyle.getAvailableStyleNames();
+        Set<String> layerStyleNames; 
+        if (WmsUtils.isVectorLayer(layer))
+            layerStyleNames = new HashSet<String>(styleNames);
+        else
+            layerStyleNames = new HashSet<String>();
+            for (String styleName : styleNames)
+                if (! ImageStyle.get(styleName).isMarker())
+                    layerStyleNames.add(styleName);
+        
         Map<String, Object> models = new HashMap<String, Object>();
         models.put("layer", layer);
         models.put("datesWithData", datesWithData);
@@ -203,6 +218,7 @@ public abstract class AbstractMetadataController
         // The names of the palettes supported by this layer.  Actually this
         // will be the same for all layers, but we can't put this in the menu
         // because there might be several menu JSPs.
+        models.put("styleNames", layerStyleNames);
         models.put("paletteNames", ColorPalette.getAvailablePaletteNames());
         return new ModelAndView("showLayerDetails", models);
     }

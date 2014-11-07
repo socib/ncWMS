@@ -51,13 +51,15 @@ import uk.ac.rdg.resc.edal.coverage.grid.HorizontalGrid;
 import uk.ac.rdg.resc.edal.geometry.HorizontalPosition;
 import uk.ac.rdg.resc.edal.util.Range;
 import uk.ac.rdg.resc.edal.util.Ranges;
+import uk.ac.rdg.resc.ncwms.exceptions.StyleNotDefinedException;
 import uk.ac.rdg.resc.ncwms.exceptions.WmsException;
-import uk.ac.rdg.resc.ncwms.graphics.plot.BoxfillPlot;
 import uk.ac.rdg.resc.ncwms.graphics.plot.ColorMap;
 import uk.ac.rdg.resc.ncwms.graphics.plot.ContourPlot;
 import uk.ac.rdg.resc.ncwms.graphics.plot.Label;
 import uk.ac.rdg.resc.ncwms.graphics.plot.MarkerPlot;
 import uk.ac.rdg.resc.ncwms.graphics.plot.MarkerStyle;
+import uk.ac.rdg.resc.ncwms.graphics.plot.RasterStyle;
+import uk.ac.rdg.resc.ncwms.graphics.plot.RasterPlot;
 import uk.ac.rdg.resc.ncwms.util.WmsUtils;
 import uk.ac.rdg.resc.ncwms.wms.Layer;
 
@@ -71,20 +73,15 @@ public final class ImageProducer
 {
     private static final Logger logger = LoggerFactory.getLogger(ImageProducer.class);
 
-    public static enum Style {BOXFILL, VECTOR, CONTOUR, BARB, STUMPVEC, TRIVEC, LINEVEC, FANCYVEC};
-    
     public static final int LEGEND_WIDTH = 110;
     public static final int LEGEND_HEIGHT = 264;
     
-    private Style style;
+    private ImageStyle style;
     private HorizontalGrid layerGrid;
     private HorizontalGrid imageGrid;
     private ColorMap colorMap;
     private boolean autoScale;
     private int numContours;
-    private float arrowLength = 14.0f;
-    private float barbLength = 28.0f;
-    private int equator_y_index;
     public float vectorScale;
     
     // set of rendered images, ready to be turned into a picture
@@ -254,6 +251,36 @@ public final class ImageProducer
     private ImageProducer() {}
 
     /**
+     * Makes sure that the scale is set: if we are auto-scaling, this reads all
+     * of the data we have stored to find the extremes.  If the scale has
+     * already been set, this does nothing.
+     */
+    private void setScale()
+    {
+        if (autoScale)
+        {
+            Float scaleMin = null;
+            Float scaleMax = null;
+            logger.debug("Setting the scale automatically");
+            // We have a cache of image data, which we use to generate the colour scale
+            for (Components comps : this.frameData)
+            {
+                // We only use the first component if this is a vector quantity
+                Range<Float> range = Ranges.findMinMax(comps.x);
+                // TODO: could move this logic to the Range/Ranges class
+                if (!range.isEmpty())
+                {
+                    if (scaleMin == null || range.getMinimum().compareTo(scaleMin) < 0)
+                        scaleMin = range.getMinimum();
+                    if (scaleMax == null || range.getMaximum().compareTo(scaleMax) > 0)
+                        scaleMax = range.getMaximum();
+                }
+            }
+            colorMap.setScaleRange(scaleMin, scaleMax);
+        }
+    }
+
+    /**
      * Creates and returns a single frame as an Image, based on the given data.
      * Adds the label if one has been set.  The scale must be set before
      * calling this method.
@@ -273,19 +300,20 @@ public final class ImageProducer
         List<float[]> data = new ArrayList<float[]>();
         List<List<Float>> cmps = new ArrayList<List<Float>>();
         cmps.add(comps.getMagnitudes());
-        if (isArrowStyle(style))
+        if (style.isMarker())
             cmps.add(comps.getAngles());
         extractPlotData(cmps, data, crds, size);
         
         // Plot the data.
-        if (style == Style.BOXFILL)
+        if (style.isRaster())
         {
-            BoxfillPlot plot = new BoxfillPlot(crds.get(0), crds.get(1),
-                                               data.get(0), size[0], size[1], 
-                                               colorMap);
+            RasterStyle rasterFillStyle = style.getRasterStyle();
+            RasterPlot plot = new RasterPlot(crds.get(0), crds.get(1),
+                                             data.get(0), size[0], size[1], 
+                                             colorMap, rasterFillStyle);
             plot.draw(graphics, mapGraphicsTransform);
         }
-        if (isContourStyle(style))
+        if (style.isContour())
         {
             float levels[] = getContourLevels();
             NumberFormat formatter = getNumberFormat(4);
@@ -300,14 +328,17 @@ public final class ImageProducer
                     4.0f, 3.0f);
             plot.draw(graphics, mapGraphicsTransform);
         }
-        if (isArrowStyle(style))
+        if (style.isMarker())
         {
-            MarkerStyle markerStyle = getVectorMarkerStyle();
+            ColorMap markerColorMap = style.isConstantColorMarker() ? null : colorMap;
+            Color markerColor = style.getMarkerColor();
+            MarkerStyle markerStyle = style.getMarkerStyle();
             float markerScale = (float) (vectorScale / getImageWidth() * getMapWidth()); 
             MarkerPlot plot = new MarkerPlot(crds.get(0), crds.get(1),
                                              data.get(0), data.get(1), data.get(0), 
                                              size[0], size[1],
-                                             colorMap, null, markerStyle, markerScale);
+                                             markerColorMap, markerColor, 
+                                             markerStyle, markerScale);
             plot.draw(graphics, mapGraphicsTransform);
         }
         if (label != null && !label.isEmpty()) {
@@ -383,7 +414,7 @@ public final class ImageProducer
      */
     private BufferedImage getMapImage()
     {
-        if (isContourStyle(style) || isArrowStyle(style))
+        if ((style.isContour() || style.isMarker()) && (! style.isRaster()))
             return new BufferedImage(getImageWidth(), getImageHeight(),
                                      BufferedImage.TYPE_INT_ARGB);
         else
@@ -405,7 +436,8 @@ public final class ImageProducer
         graphics.setColor(backgroundColor);
         graphics.clearRect(0, 0, width, height);
         graphics.clipRect(0, 0, width, height);
-        if (isContourStyle(style) || isArrowStyle(style))
+        if ((style.isContour() || style.isMarker()) &&
+            (! style.isRaster()))
         {
             graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
             graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -478,80 +510,6 @@ public final class ImageProducer
         pattern = integer + fraction + exponent;
         return new DecimalFormat(" " + pattern + ";" + "-" + pattern);
     }
-    
-
-    /**
-     * Get the marker style for a vector plot from current map style.
-     * @return the proper marker style.
-     */
-    private MarkerStyle getVectorMarkerStyle()
-    {
-        if (style == Style.STUMPVEC || style == Style.VECTOR)
-            return MarkerStyle.STUMPY;
-        else if (style == Style.TRIVEC)
-            return MarkerStyle.TRIANGLE;
-        else if (style == Style.LINEVEC)
-            return MarkerStyle.LINE;
-        else if (style == Style.FANCYVEC)
-            return MarkerStyle.FANCY;
-        else
-            return null;
-    }
-
-    /**
-     * Makes sure that the scale is set: if we are auto-scaling, this reads all
-     * of the data we have stored to find the extremes.  If the scale has
-     * already been set, this does nothing.
-     */
-    private void setScale()
-    {
-        if (autoScale)
-        {
-            Float scaleMin = null;
-            Float scaleMax = null;
-            logger.debug("Setting the scale automatically");
-            // We have a cache of image data, which we use to generate the colour scale
-            for (Components comps : this.frameData)
-            {
-                // We only use the first component if this is a vector quantity
-                Range<Float> range = Ranges.findMinMax(comps.x);
-                // TODO: could move this logic to the Range/Ranges class
-                if (!range.isEmpty())
-                {
-                    if (scaleMin == null || range.getMinimum().compareTo(scaleMin) < 0)
-                    {
-                        scaleMin = range.getMinimum();
-                    }
-                    if (scaleMax == null || range.getMaximum().compareTo(scaleMax) > 0)
-                    {
-                        scaleMax = range.getMaximum();
-                    }
-                }
-            }
-            colorMap.setScaleRange(scaleMin, scaleMax);
-        }
-    }
-
-    /**
-     * Check if the style of the map plot is arrow (some kind of vector marker).
-     * @param style the style of the plot     * @return whether the style of the plot is arrow.
-     */
-    private static boolean isArrowStyle(Style style)
-    {
-        return (style == Style.VECTOR   || style == Style.BARB || 
-                style == Style.FANCYVEC || style == Style.STUMPVEC || 
-                style == Style.TRIVEC   || style == Style.LINEVEC);
-    }
-
-    /**
-     * Check if the style of the map plot is contour.
-     * @param style the style of the plot
-     * @return whether the style of the plot is contour.
-     */
-    private static boolean isContourStyle(Style style)
-    {
-        return style == Style.CONTOUR;
-    }
 
     /**
      * Extract the subgrid with the data to plot.
@@ -618,7 +576,7 @@ public final class ImageProducer
         private int opacity = 100;
         private Range<Float> scaleRange = null;
         private Boolean logarithmic = null;
-        private Style style = null;
+        private ImageStyle style = null;
         private float vectorScale = 14.0f;
         private int numContours = 10;
         private int equator_y_index = 0;
@@ -638,16 +596,16 @@ public final class ImageProducer
         }
 
         /** Sets the style to be used.  If not set or if the parameter is null,
-         * {@link Style#BOXFILL} will be used
+         * default style will be used
          */
-        public Builder style(Style style)
+        public Builder style(ImageStyle style)
         {
             this.style = style;
             return this;
         }
 
-        /** Sets the colour palette.  If not set or if the parameter is null,
-         * the default colour palette will be used.
+        /** Sets the color palette.  If not set or if the parameter is null,
+         * the default color palette will be used.
          * {@see ColorPalette}
          */
         public Builder palette(ColorPalette palette)
@@ -695,7 +653,8 @@ public final class ImageProducer
         /** Sets the opacity of the picture, from 0 to 100 (default 100) */
         public Builder opacity(int opacity)
         {
-            if (opacity < 0 || opacity > 100) throw new IllegalArgumentException();
+            if (opacity < 0 || opacity > 100)
+                throw new IllegalArgumentException("invalid opacity level " + opacity);
             this.opacity = opacity;
             return this;
         }
@@ -720,9 +679,8 @@ public final class ImageProducer
         /** Sets the number of contours to use in the image, from 2 (default 10) */
         public Builder numContours(int numContours)
         {
-            if (numContours < 2) {
-                throw new IllegalArgumentException();
-            }
+            if (numContours < 2)
+                throw new IllegalArgumentException("invalid number of contours " + numContours);
             this.numContours = numContours;
             return this;
         }
@@ -733,7 +691,8 @@ public final class ImageProducer
          */
         public Builder backgroundColor(Color bgColor)
         {
-            if (bgColor != null) this.bgColor = bgColor;
+            if (bgColor != null)
+                this.bgColor = bgColor;
             return this;
         }
 
@@ -769,11 +728,9 @@ public final class ImageProducer
             ip.vectorScale = this.vectorScale;
             ip.equator_y_index = this.equator_y_index;
             ip.numContours = this.numContours;
-            ip.style = this.style == null
-                ? Style.BOXFILL
-                : this.style;
+            ip.style = this.style;
             ip.colorMap = new ColorMap(
-                    colorPalette, numColorBands,
+                    colorPalette.getColors(), numColorBands,
                     bgColor, lowColor, highColor,
                     transparent, lowColor == null, highColor == null,
                     0.01f * opacity);

@@ -17,6 +17,8 @@ response.setDateHeader ("Expires", 0); //prevents caching at the proxy server
          layerLimit = Maximum number of layers that can be requested simultaneously from this server (int)
          featureInfoFormats = Array of Strings representing MIME types of supported feature info formats
          legendWidth, legendHeight = size of the legend that will be returned from GetLegendGraphic
+         scalarStyleNames = Names of styles for scalar layers supported by this server (Set<String>)
+         vectorStyleNames = Names of styles for vector layers supported by this server (Set<String>)
          paletteNames = Names of colour palettes that are supported by this server (Set<String>)
          verboseTimes = boolean flag to indicate whether we should use a verbose or concise version of the TIME value string
      --%>
@@ -129,9 +131,9 @@ response.setDateHeader ("Expires", 0); //prevents caching at the proxy server
                             </c:choose>
                         </Dimension>
                     </c:if>
-                    <c:set var="styles" value="boxfill"/>
+                    <c:set var="styles" items="${scalarStyleNames}"/>
                     <c:if test="${utils:isVectorLayer(layer)}">
-                        <c:set var="styles" value="barb,fancyvec,trivec,stumpvec,linevec,vector,boxfill"/>
+                        <c:set var="styles" items="${vectorStyleNames}"/>
                     </c:if>
                     <c:forEach var="style" items="${styles}">
                     <c:forEach var="paletteName" items="${paletteNames}">

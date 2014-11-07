@@ -31,9 +31,6 @@ package uk.ac.rdg.resc.ncwms.graphics.plot;
 import java.awt.Color;
 import java.awt.image.IndexColorModel;
 
-import uk.ac.rdg.resc.ncwms.graphics.ColorPalette;
-
-
 /**
  * A color map holds a color scheme and a scale transform to provide a mapping
  * from real data values to colors. The scale transform is specified by:
@@ -55,7 +52,7 @@ public class ColorMap
      */
     public static final int MAX_NUM_COLORS = 253;
     
-    private ColorPalette palette = null;
+    private Color[] palette = null;
     private int numColorBands = MAX_NUM_COLORS;
     private Color undefValColor = new Color(0, 0, 0, 0);
     private Color belowMinColor = new Color(0, 0, 0, 0);
@@ -108,7 +105,7 @@ public class ColorMap
      * @param extendAbove use highest palette color for values above maximum scale value.
      * @param opacity alpha channel factor to apply to each color.
      */
-    public ColorMap(ColorPalette palette, int numColorBands,
+    public ColorMap(Color[] palette, int numColorBands,
                     Color undefValColor, Color belowMinColor, Color aboveMaxColor,
                     boolean transparent, boolean extendBelow, boolean extendAbove,
                     float opacity)
@@ -152,7 +149,7 @@ public class ColorMap
      * @param maxValue value to map to the highest color in the color map.
      * @param logScale whether the scale is logarithmic.
      */
-    public ColorMap(ColorPalette palette, int numColorBands,
+    public ColorMap(Color[] palette, int numColorBands,
                     Color undefValColor, Color belowMinColor, Color aboveMaxColor,
                     boolean transparent, boolean extendBelow, boolean extendAbove,
                     float opacity, 
@@ -178,14 +175,14 @@ public class ColorMap
      * @param extendAbove use highest palette color for values above maximum scale value.
      * @param opacity alpha channel factor to apply to each color.
      */
-    public void setColors(ColorPalette palette, int numColorBands,
+    public void setColors(Color palette[], int numColorBands,
                           Color undefValColor, Color belowMinColor, Color aboveMaxColor,
                           boolean transparent, boolean extendBelow, boolean extendAbove, float opacity)
     {
         if (numColorBands < 1 || numColorBands > MAX_NUM_COLORS)
             throw new IllegalArgumentException("number of color bands must be between 1 and " + MAX_NUM_COLORS);
         this.numColorBands = numColorBands;
-        this.palette = (palette == null) ? ColorPalette.get(ColorPalette.DEFAULT_PALETTE_NAME) : palette;
+        this.palette = palette;
         this.undefValColor = undefValColor;
         this.belowMinColor = belowMinColor;
         this.aboveMaxColor = aboveMaxColor;
@@ -407,8 +404,7 @@ public class ColorMap
 
         if (colors == null || colors.length != size)
             colors = new Color[size];
-        Color[] paletteColors = palette.getColors();
-        int numPaletteBands = palette.getSize();
+        int numPaletteBands = palette.length;
         if (numPaletteBands > 1 && numColorBands > 1)
             for (int colorIndex = 0; colorIndex < numColorBands; colorIndex++)
             {
@@ -416,13 +412,13 @@ public class ColorMap
                 int paletteIndex = (int) Math.floor(c * (numPaletteBands - 1.0f));
                 double p = c * (numPaletteBands - 1.0f) - paletteIndex;
                 if (p == 0.0f) {
-                    Color curr = paletteColors[paletteIndex];
+                    Color curr = palette[paletteIndex];
                     colors[colorIndex] = new Color(
                             curr.getRed(), curr.getGreen(), curr.getBlue(),
                             (int) Math.round(curr.getAlpha() * opacity));
                 } else {
-                    Color prev = paletteColors[paletteIndex];
-                    Color next = paletteColors[paletteIndex + 1];
+                    Color prev = palette[paletteIndex];
+                    Color next = palette[paletteIndex + 1];
                     colors[colorIndex] = new Color(
                             (int) Math.round( (1.f - p) * prev.getRed()   + p * next.getRed()),
                             (int) Math.round( (1.f - p) * prev.getGreen() + p * next.getGreen()),
@@ -432,7 +428,7 @@ public class ColorMap
             }
         else
             for (int colorIndex = 0; colorIndex < numColorBands; colorIndex++)
-                colors[colorIndex] = paletteColors[0];
+                colors[colorIndex] = palette[0];
         if (undefValColor != null)
             colors[undefValColorIndex] = new Color(
                     undefValColor.getRed(), undefValColor.getGreen(), undefValColor.getBlue(),

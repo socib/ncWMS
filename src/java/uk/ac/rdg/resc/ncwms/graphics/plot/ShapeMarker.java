@@ -47,7 +47,7 @@ public abstract class ShapeMarker extends Marker
         g2.draw(shape());
         g2.setTransform(g2transform);
     }
-    
+
     @Override
     public void fill(Graphics2D g2)
     {
