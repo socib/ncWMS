@@ -1,8 +1,7 @@
 package uk.ac.rdg.resc.ncwms.graphics;
 
 import java.awt.Color;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.HashSet;
 import java.util.Set;
 
 import uk.ac.rdg.resc.ncwms.graphics.plot.MarkerStyle;
@@ -17,8 +16,9 @@ public enum ImageStyle {
     BOXFILL    (RasterStyle.BOXFILL,   null, null),
     AREAFILL   (RasterStyle.AREAFILL,  null, null),
     SHADEFILL  (RasterStyle.SHADEFILL, null, null),
-    VECTOR     (RasterStyle.BOXFILL,   MarkerStyle.STUMPY,   Color.BLACK),
+    VECTOR     (RasterStyle.BOXFILL,   MarkerStyle.PRETTY,   Color.BLACK),
     // BARB       (null,                  MarkerStyle.BARB,   null),
+    PRETTYVEC  (null,                  MarkerStyle.PRETTY,   null),
     STUMPVEC   (null,                  MarkerStyle.STUMPY,   null),
     TRIVEC     (null,                  MarkerStyle.TRIANGLE, null),
     LINEVEC    (null,                  MarkerStyle.LINE,     null),
@@ -36,22 +36,7 @@ public enum ImageStyle {
         this.markerColor = markerColor;
     }
     
-    public static final String DEFAULT_STYLE_NAME = "boxfill";
     public static final ImageStyle DEFAULT_STYLE = BOXFILL;
-    
-    private static final Map<String, ImageStyle> styles = new HashMap<String, ImageStyle>();
-    static {
-        styles.put("contour", CONTOUR);
-        styles.put("boxfill", BOXFILL);
-        styles.put("areafill", AREAFILL);
-        styles.put("shadefill", SHADEFILL);
-        styles.put("vector", VECTOR);
-        // styles.put("barb", BARB);
-        styles.put("stumpvec", STUMPVEC);
-        styles.put("trivec", TRIVEC);
-        styles.put("linevec", LINEVEC);
-        styles.put("fancyvec", FANCYVEC);
-    }
     
     /**
      * Get the image style with the given name.
@@ -61,14 +46,10 @@ public enum ImageStyle {
      */
     public static ImageStyle get(String name) throws IllegalArgumentException
     {
-        ImageStyle style = null;
         if (name == null || name.trim().equals(""))
-            style = DEFAULT_STYLE;
+            return DEFAULT_STYLE;
         else
-            style = styles.get(name.trim().toLowerCase());
-        if (style == null)
-            throw new IllegalArgumentException("unknown style " + name);
-        return style;
+            return ImageStyle.valueOf(name.trim().toUpperCase());
     }
     
     /**
@@ -77,7 +58,11 @@ public enum ImageStyle {
      */
     public static Set<String> getAvailableStyleNames()
     {
-        return styles.keySet();
+        ImageStyle[] styles = ImageStyle.values();
+        Set<String> names = new HashSet<String>(styles.length);
+        for (ImageStyle style : styles)
+            names.add(style.getName());
+        return names;
     }
     
     /**
@@ -117,7 +102,7 @@ public enum ImageStyle {
     }
 
     /**
-     * Get the fill style for a raster plot from current map style.
+     * Get the fill style for a raster plot from a map image style.
      * @return the proper raster fill style, or null if not a raster style.
      */
     public RasterStyle getRasterStyle()
@@ -126,7 +111,7 @@ public enum ImageStyle {
     }
 
     /**
-     * Get the marker style for a vector plot from current map style.
+     * Get the marker style for a vector plot from a map images style.
      * @return the proper marker style, or null if not a vector style.
      */
     public MarkerStyle getMarkerStyle()
@@ -135,11 +120,20 @@ public enum ImageStyle {
     }
 
     /**
-     * Get the marker color for a vector plot from current map style.
+     * Get the marker color for a vector plot from a map image style.
      * @return the marker color, or null if marker should not use a color.
      */
     public Color getMarkerColor()
     {
         return this.markerColor;
+    }
+    
+    /**
+     * Get the name of a map image style.
+     * @return
+     */
+    public String getName()
+    {
+        return toString().toLowerCase();
     }
 }

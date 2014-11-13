@@ -6,6 +6,12 @@ import java.awt.geom.Path2D;
 
 public enum MarkerStyle
 {
+    PRETTY
+    {
+        public PrettyVector marker() {return new PrettyVector();}
+        public PrettyVector marker(double angle) {return new PrettyVector(angle);}
+        public PrettyVector marker(double angle, double scale) {return new PrettyVector(angle, scale);}
+    },
     STUMPY
     {
         public StumpyVector marker() {return new StumpyVector();}
@@ -45,6 +51,32 @@ public enum MarkerStyle
         return marker((double) angle, (double) scale);
     }
 
+}
+
+class PrettyVector extends SimpleMarker
+{
+    public PrettyVector() {super();}
+    public PrettyVector(double angle) {super(angle);}
+    public PrettyVector(double angle, double scale) {super(angle, scale);}
+    @Override public boolean orientable() {return true;}
+    @Override public boolean scalable() {return false;}
+    @Override public boolean drawable() {return true;}
+    @Override public boolean fillable() {return true;}
+    @Override public Shape shape() {return shape;}
+    private static final Shape shape = prettyvec();
+    private static Shape prettyvec()
+    {
+        Path2D.Double path = new Path2D.Double();
+        path.moveTo(0.000, -0.045);
+        path.lineTo(0.625, -0.045);
+        path.lineTo(0.500, -0.217);
+        path.lineTo(1.000,  0.000);
+        path.lineTo(0.500,  0.217);
+        path.lineTo(0.625,  0.045);
+        path.lineTo(0.000,  0.045);
+        path.closePath();
+        return path;
+    }
 }
 
 class StumpyVector extends SimpleMarker
