@@ -9,6 +9,8 @@ import java.util.List;
 import org.geotoolkit.referencing.CRS;
 import org.opengis.coverage.grid.GridEnvelope;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
+import org.opengis.referencing.cs.CoordinateSystem;
+import org.opengis.referencing.cs.RangeMeaning;
 import org.opengis.referencing.operation.MathTransform;
 import org.opengis.referencing.operation.TransformException;
 import org.opengis.util.FactoryException;
@@ -164,6 +166,17 @@ public class MapGridImpl implements MapGrid
     {
         final CoordinateReferenceSystem sourceCRS = grid.getCoordinateReferenceSystem();
         final CoordinateReferenceSystem targetCRS = bbox.getCoordinateReferenceSystem();
+        final CoordinateSystem targetCS = targetCRS.getCoordinateSystem();
+        final double[] axisMinValues = {targetCS.getAxis(0).getMinimumValue(),
+                                        targetCS.getAxis(1).getMinimumValue()};
+        final double[] axisMaxValues = {targetCS.getAxis(0).getMaximumValue(),
+                                        targetCS.getAxis(1).getMaximumValue()};
+        final double[] axisRanges = {axisMaxValues[0] - axisMinValues[0],
+                                     axisMaxValues[1] - axisMinValues[1]};
+        final boolean[] axisWrap = {
+                targetCS.getAxis(0).getRangeMeaning().equals(RangeMeaning.WRAPAROUND) && ! Double.isInfinite(axisRanges[0]),
+                targetCS.getAxis(1).getRangeMeaning().equals(RangeMeaning.WRAPAROUND) && ! Double.isInfinite(axisRanges[1])
+        };
         final MathTransform transform;
         try {
             transform = CRS.findMathTransform(sourceCRS, targetCRS, true);
@@ -194,6 +207,15 @@ public class MapGridImpl implements MapGrid
                         } catch (TransformException e) {
                             throw new RuntimeException(e);
                         }
+                    // To wrap (normalize) the coordinates we could use the modulo operation
+                    // but we should recall that Java spec states that the sign of the result
+                    // is the sign of the dividend:
+                    // coords[0] = axisMinValues[0] + (coords[0] - axisMinValues[0]) % axisRanges[0] + (coords[0] < axisMinValues[0] ? axisRanges[0] : 0.0);
+                    // coords[1] = axisMinValues[1] + (coords[1] - axisMinValues[1]) % axisRanges[1] + (coords[0] < axisMinValues[1] ? axisRanges[1] : 0.0);
+                    if (axisWrap[0])
+                        coords[0] -= Math.floor((coords[0] - axisMinValues[0]) / axisRanges[0]) * axisRanges[0];
+                    if (axisWrap[1])
+                        coords[1] -= Math.floor((coords[1] - axisMinValues[1]) / axisRanges[1]) * axisRanges[1];
                     if (minCoords[0] <= coords[0] && coords[0] <= maxCoords[0] &&
                         minCoords[1] <= coords[1] && coords[1] <= maxCoords[1])
                     {
@@ -230,6 +252,17 @@ public class MapGridImpl implements MapGrid
         if (gridExtent == null)
             return new ArrayList<HorizontalPosition>();
         final CoordinateReferenceSystem sourceCRS = sourceGrid.getCoordinateReferenceSystem();
+        final CoordinateSystem targetCS = targetCRS.getCoordinateSystem();
+        final double[] axisMinValues = {targetCS.getAxis(0).getMinimumValue(),
+                                        targetCS.getAxis(1).getMinimumValue()};
+        final double[] axisMaxValues = {targetCS.getAxis(0).getMaximumValue(),
+                                        targetCS.getAxis(1).getMaximumValue()};
+        final double[] axisRanges = {axisMaxValues[0] - axisMinValues[0],
+                                     axisMaxValues[1] - axisMinValues[1]};
+        final boolean[] axisWrap = {
+                targetCS.getAxis(0).getRangeMeaning().equals(RangeMeaning.WRAPAROUND) && ! Double.isInfinite(axisRanges[0]),
+                targetCS.getAxis(1).getRangeMeaning().equals(RangeMeaning.WRAPAROUND) && ! Double.isInfinite(axisRanges[1])
+        };
         final MathTransform transform;
         try {
             transform = CRS.findMathTransform(sourceCRS, targetCRS, true);
@@ -255,6 +288,10 @@ public class MapGridImpl implements MapGrid
                     } catch (TransformException e) {
                         throw new RuntimeException(e);
                     }
+                if (axisWrap[0])
+                    coords[0] -= Math.floor((coords[0] - axisMinValues[0]) / axisRanges[0]) * axisRanges[0];
+                if (axisWrap[1])
+                    coords[1] -= Math.floor((coords[1] - axisMinValues[1]) / axisRanges[1]) * axisRanges[1];
                 mapPoints.add(new HorizontalPositionImpl(coords[0], coords[1], targetCRS));
             }
         }
