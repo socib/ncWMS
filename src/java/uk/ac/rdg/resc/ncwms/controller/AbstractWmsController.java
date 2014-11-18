@@ -192,7 +192,6 @@ public abstract class AbstractWmsController extends AbstractController {
                         httpServletResponse, usageLogEntry);
         } catch (WmsException wmse) {
             // We don't log these errors
-            wmse.printStackTrace();
             usageLogEntry.setException(wmse);
             String wmsVersion = params.getWmsVersion();
             if (wmsVersion != null && wmsVersion.equals("1.1.1")) {
