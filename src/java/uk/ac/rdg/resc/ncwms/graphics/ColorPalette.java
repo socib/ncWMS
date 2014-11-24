@@ -35,7 +35,6 @@ import java.io.FileReader;
 import java.io.Reader;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
@@ -195,7 +194,12 @@ public class ColorPalette
     private static Color[] readColorPalette(Reader paletteReader) throws Exception
     {
         BufferedReader reader = new BufferedReader(paletteReader);
-        List<Color> colors = new ArrayList<Color>();
+        ArrayList<Float> a = new ArrayList<Float>(256);
+        ArrayList<Float> r = new ArrayList<Float>(256);
+        ArrayList<Float> g = new ArrayList<Float>(256);
+        ArrayList<Float> b = new ArrayList<Float>(256);
+        boolean normalized = true;
+        int ncolors = 0;
         String line;
         int lineno = 0;
         try
@@ -203,46 +207,35 @@ public class ColorPalette
             while((line = reader.readLine()) != null)
             {
                 lineno++;
-                Color color;
-                Float a, r, g, b;
-                float[] components = {-1.0f, -1.0f, -1.0f, -1.0f};
+                Float[] components = {-1.0f, -1.0f, -1.0f, -1.0f};
                 int ncomponents = 0;
                 boolean comment = false;
                 StringTokenizer tok = new StringTokenizer(line.trim());
                 while (ncomponents < 4 && tok.hasMoreTokens() && ! comment)
                 {
                     String token = tok.nextToken();
-                    if (token.startsWith("#")) {
-                       comment = true;
-                    } else {
-                       components[ncomponents++] = Float.valueOf(token);
-                    }
+                    if (token.startsWith("#"))
+                        comment = true;
+                    else
+                        components[ncomponents++] = new Float(token);
                 }
                 if (ncomponents == 0)
                    continue;
                 if (ncomponents < 3)
-                   throw new Exception("missing components");
-                b = components[ncomponents-1];
-                g = components[ncomponents-2];
-                r = components[ncomponents-3];
-                a = ncomponents == 4 ? components[0] : 1.0f;
-                if (r <   0.0f || g <   0.0f || b <   0.0f || a <   0.0f ||
-                    r > 255.0f || g > 255.0f || b > 255.0f || a > 255.0f) {
-                    throw new Exception("invalid component value");
-                }
-                if (r > 1.0f || g > 1.0f || b > 1.0f || a > 1.0f)
-                {
-                    // color expressed in the range 0->255
-                    color = new Color(r.intValue(), g.intValue(), b.intValue(),
-                                      ncomponents == 4 ? a.intValue() : 255);
-                } else {
-                    // color expressed in the range 0->1
-                    color = new Color(r, g, b, a);
-                }
-                colors.add(color);
+                   throw new Exception("invalid number of components");
+                for (int j = 0; j < ncomponents; j++)
+                    if (components[j] < 0.0f || components[j] > 255.0f)
+                        throw new Exception("invalid component value");
+                    else if (normalized && components[j] > 1.0f)
+                        normalized = false;
+                b.add(components[ncomponents-1]);
+                g.add(components[ncomponents-2]);
+                r.add(components[ncomponents-3]);
+                a.add(ncomponents == 4 ? components[0] : null);
+                ncolors++;
             }
         }
-        catch(Exception e)
+        catch (Exception e)
         {
             throw new RuntimeException("File format error at line " + lineno +": "
                 + " each line must contain 3 or 4 numbers (R G B) or (A R G B)"
@@ -250,9 +243,19 @@ public class ColorPalette
         }
         finally
         {
-            if (reader != null) reader.close();
+            if (reader != null)
+                reader.close();
         }
-        return colors.toArray(new Color[0]);
+        Color[] colors = new Color[ncolors];
+        if (normalized)
+            for (int i = 0; i < ncolors; i++)
+                colors[i] = new Color(r.get(i), g.get(i), b.get(i),
+                                      a.get(i) == null ? 1.0f : a.get(i));
+        else
+            for (int i = 0; i < ncolors; i++)
+                colors[i] = new Color(r.get(i).intValue(), g.get(i).intValue(), b.get(i).intValue(),
+                                      a.get(i) == null ? 255 : a.get(i).intValue());
+        return colors;
     }
     
     public static void addPalette(String name, Reader reader){
