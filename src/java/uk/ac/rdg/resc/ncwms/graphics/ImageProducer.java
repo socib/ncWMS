@@ -87,7 +87,7 @@ public final class ImageProducer
     private ColorMap colorMap;
     private boolean autoScale;
     private int numContours;
-    public float vectorScale;
+    private float vectorScale;
     
     // set of rendered images, ready to be turned into a picture
     private List<BufferedImage> renderedFrames = new ArrayList<BufferedImage>();
@@ -120,8 +120,8 @@ public final class ImageProducer
     {
         Color backgroundColor = colorMap.getExtendedUndefValColor();
         float[] backgroundHSB = Color.RGBtoHSB(backgroundColor.getRed(),
-                backgroundColor.getGreen(),
-                backgroundColor.getBlue(), null);
+                                               backgroundColor.getGreen(),
+                                               backgroundColor.getBlue(), null);
         Color textColor =  backgroundHSB[2] < 0.5 ? Color.WHITE : Color.BLACK;
         BufferedImage legend = new BufferedImage(LEGEND_WIDTH, LEGEND_HEIGHT,
                                                  BufferedImage.TYPE_INT_ARGB);

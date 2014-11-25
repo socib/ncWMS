@@ -237,7 +237,7 @@ public class ColorMap
         this.logScale = logScale;
         updateScale();
     }
-
+    
     
     /**
      * Get the number of color bands covering the color scale range.
@@ -283,6 +283,40 @@ public class ColorMap
     {
         return maxValue;
     }
+    
+    
+    /**
+     * Get the color for undefined values ignoring transparency.
+     * 
+     * @return the color for undefined values.
+     */
+    public Color getUndefValColor()
+    {
+        return undefValColor;
+    }
+    
+    
+    /**
+     * Get the color for values below the minimum value in the range ignoring extension.
+     * 
+     * @return the color for values below the minimum value in the range.
+     */
+    public Color getBelowMinColor()
+    {
+        return belowMinColor;
+    }
+    
+    
+    /**
+     * Get the color for values above the maximum value in the range ignoring extension.
+     * 
+     * @return the color for values above the maximum value in the range.
+     */
+    public Color getAboveMaxColor()
+    {
+        return aboveMaxColor;
+    }
+    
     
     /**
      * Get the index of the color corresponding to a value.
@@ -465,6 +499,7 @@ public class ColorMap
         }
     }
     
+    
     /**
      * Update the internal cached color model.
      */
@@ -485,6 +520,8 @@ public class ColorMap
         }
         colorModel = new IndexColorModel(8, length, r, g, b, a);
     }
+    
+    
     /**
      * Get the indexed color model based on this color map.
      * @return a 8-bit indexed color model with the colors in the color map.
