@@ -326,7 +326,7 @@ public abstract class AbstractMetadataController
         else if (layer instanceof VectorLayer)
         {
             VectorLayer vectorLayer = (VectorLayer) layer;
-            List<Float>[] xyVals = vectorLayer.readXYComponents(tValue, zValue, imageGrid);
+            List<Float>[] xyVals = vectorLayer.readXYComponents(tValue, zValue, mapGrid);
             magnitudes = WmsUtils.getMagnitudes(xyVals[0], xyVals[1]);
         }
         else
