@@ -430,7 +430,7 @@ public class ColorMap
         else
             belowMinColorIndex = size++;
         if (extendAbove)
-            aboveMaxColorIndex = numColorBands;
+            aboveMaxColorIndex = numColorBands - 1;
         else if (aboveMaxColor == null)
             aboveMaxColorIndex = undefValColorIndex;
         else
