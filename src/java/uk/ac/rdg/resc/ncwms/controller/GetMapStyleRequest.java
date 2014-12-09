@@ -55,7 +55,8 @@ public class GetMapStyleRequest
     private int opacity;                  // Opacity of the image in the range [0,100]
     private int numColorBands;            // Number of color bands to use in the image
     private int numContours;              // Number of contours to use in the image
-    private float vectorScale;            // The scale of the markers for vector plots.
+    private float markerScale;            // The scale of the markers for vector plots.
+    private float markerSpacing;          // The space of the markers for vector plots.
     private Boolean logarithmic;          // True if we're using a log scale, false if linear and null if not specified
     private Range<Float> colorScaleRange; // The limits of the color scale. 
     
@@ -74,7 +75,8 @@ public class GetMapStyleRequest
         this.opacity = getOpacity(params);
         this.numColorBands = getNumColorBands(params);
         this.numContours = getNumContours(params);
-        this.vectorScale = getVectorScale(params);
+        this.markerScale = getMarkerScale(params);
+        this.markerSpacing = getMarkerSpacing(params);
         this.colorScaleRange = getColorScaleRange(params);
         this.logarithmic = isLogScale(params);
     }
@@ -264,9 +266,20 @@ public class GetMapStyleRequest
      * @return the requested vector scale, or the default value 14.0.
      * @throws WmsException if the parameter value is invalid.
      */
-    public static float getVectorScale(RequestParams params) throws WmsException
+    public static float getMarkerScale(RequestParams params) throws WmsException
     {
-        return params.getFloat("vectorscale", 14.0f);
+        return params.getFloat("markerscale", 14.0f);
+    }
+
+    /**
+     * Extract the spacing of vector markers from the request parameters.
+     * @param params the request parameters.
+     * @return the requested vector spacing, or the marker scale value.
+     * @throws WmsException if the parameter value is invalid.
+     */
+    public static float getMarkerSpacing(RequestParams params) throws WmsException
+    {
+        return params.getFloat("markerspacing", getMarkerScale(params));
     }
 
     /**
@@ -359,9 +372,17 @@ public class GetMapStyleRequest
     /**
      * Get the scale of vector markers requested by the client.
      */
-    public float getVectorScale()
+    public float getMarkerScale()
     {
-        return vectorScale;
+        return markerScale;
+    }
+
+    /**
+     * Get the spacing of vector markers requested by the client.
+     */
+    public float getMarkerSpacing()
+    {
+        return markerSpacing;
     }
 
 }

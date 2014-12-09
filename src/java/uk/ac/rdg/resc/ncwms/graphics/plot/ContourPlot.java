@@ -83,7 +83,6 @@ public class ContourPlot {
      * @param textStroke the stroke of the outline of the labels, or null.
      * @param textSpacing the label space step for labels on the same contour.
      * @param textPadding the label padding in font units.
-     * @param textClip the region that will be effectively drawn, or null.
      */
     public ContourPlot(float[] xpnts, float[] ypnts, float[] cpnts,
                        int rows, int cols, float[] levels,

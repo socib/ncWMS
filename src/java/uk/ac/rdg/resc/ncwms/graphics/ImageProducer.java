@@ -87,7 +87,8 @@ public final class ImageProducer
     private ColorMap colorMap;
     private boolean autoScale;
     private int numContours;
-    private float vectorScale;
+    private float markerScale;
+    private float markerSpacing;
     
     // set of rendered images, ready to be turned into a picture
     private List<BufferedImage> renderedFrames = new ArrayList<BufferedImage>();
@@ -210,7 +211,7 @@ public final class ImageProducer
      */
     public List<BufferedImage> getRenderedFrames() throws WmsException
     {
-        this.setScale(); // Make sure the colour scale is set before proceeding
+        this.setScale(); // Make sure the color scale is set before proceeding
         // We render the frames if we have not done so already
         if (this.frameData != null)
         {
@@ -338,11 +339,11 @@ public final class ImageProducer
                                  Math.round(7.0f * 96.0f / 72.0f));
             Stroke lineStroke = new BasicStroke(0.75f * 96.0f / 72.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
             Stroke textStroke = new BasicStroke(1.5f * 96.0f / 72.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
-            ContourPlot plot = new ContourPlot(
-                    crds.get(0), crds.get(1), data.get(0), size[0], size[1],
-                    levels, Color.BLACK, lineStroke,
-                    formatter, font, Color.WHITE, textStroke,
-                    4.0f, 3.0f);
+            ContourPlot plot = new ContourPlot(crds.get(0), crds.get(1),
+                                               data.get(0), size[0], size[1],
+                                               levels, Color.BLACK, lineStroke,
+                                               formatter, font, Color.WHITE, textStroke,
+                                               4.0f, 3.0f);
             plot.draw(graphics, mapGraphicsTransform);
         }
         if (style.isMarker())
@@ -350,12 +351,14 @@ public final class ImageProducer
             ColorMap markerColorMap = style.isConstantColorMarker() ? null : colorMap;
             Color markerColor = style.getMarkerColor();
             MarkerStyle markerStyle = style.getMarkerStyle();
-            float markerScale = (float) (vectorScale / getImageWidth() * getMapWidth()); 
+            float markerFactor = (float) (getMapWidth() / getImageWidth());
             MarkerPlot plot = new MarkerPlot(crds.get(0), crds.get(1),
-                                             data.get(0), data.get(1), data.get(0), 
+                                             data.get(0), data.get(1), data.get(0),
                                              size[0], size[1],
-                                             markerColorMap, markerColor, 
-                                             markerStyle, markerScale);
+                                             markerColorMap, markerColor, markerStyle,
+                                             markerScale * markerFactor,
+                                             markerSpacing * markerFactor,
+                                             true);
             plot.draw(graphics, mapGraphicsTransform);
         }
         if (label != null && !label.isEmpty()) {
@@ -608,7 +611,8 @@ public final class ImageProducer
         private Range<Float> scaleRange = null;
         private Boolean logarithmic = null;
         private ImageStyle style = null;
-        private float vectorScale = 14.0f;
+        private float markerScale = 14.0f;
+        private float markerSpacing = 0.0f;
         private int numContours = 10;
 
         /** Sets map grid (contains the size of the picture and the CRS) */
@@ -689,14 +693,23 @@ public final class ImageProducer
             return this;
         }
 
-        /** Sets the vector scale. */
-        public Builder vectorScale(float scale)
+        /** Sets the marker scale. */
+        public Builder markerScale(float scale)
         {
-            if (scale <= 0) throw new IllegalArgumentException();
-            this.vectorScale = scale;
+            if (scale <= 0)
+                throw new IllegalArgumentException();
+            this.markerScale = scale;
             return this;
         }
 
+        /** Sets the marker spacing. */
+        public Builder markerSpacing(float spacing)
+        {
+            if (spacing < 0)
+                throw new IllegalArgumentException();
+            this.markerSpacing = spacing;
+            return this;
+        }
 
         /** Sets the number of contours to use in the image, from 2 (default 10) */
         public Builder numContours(int numContours)
@@ -747,7 +760,8 @@ public final class ImageProducer
             ImageProducer ip = new ImageProducer();
             ip.layerGrid = this.layerGrid;
             ip.imageGrid = this.imageGrid;
-            ip.vectorScale = this.vectorScale;
+            ip.markerScale = this.markerScale;
+            ip.markerSpacing = this.markerSpacing;
             ip.numContours = this.numContours;
             ip.style = this.style;
             ip.colorMap = new ColorMap(
