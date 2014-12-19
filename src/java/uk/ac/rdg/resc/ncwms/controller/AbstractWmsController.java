@@ -478,6 +478,7 @@ public abstract class AbstractWmsController extends AbstractController {
             .numContours(styleRequest.getNumContours())
             .markerScale(styleRequest.getMarkerScale())
             .markerSpacing(styleRequest.getMarkerSpacing())
+            .markerClipping(styleRequest.getMarkerClipping())
             .build();
 
         double zValue = getElevationValue(dataRequest.getElevationString(), layer);

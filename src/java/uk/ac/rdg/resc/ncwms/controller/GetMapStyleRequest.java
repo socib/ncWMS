@@ -55,8 +55,9 @@ public class GetMapStyleRequest
     private int opacity;                  // Opacity of the image in the range [0,100]
     private int numColorBands;            // Number of color bands to use in the image
     private int numContours;              // Number of contours to use in the image
-    private float markerScale;            // The scale of the markers for vector plots.
-    private float markerSpacing;          // The space of the markers for vector plots.
+    private float markerScale;            // Scale of the markers for vector plots.
+    private float markerSpacing;          // Space of the markers for vector plots.
+    private boolean markerClipping;         // True if markers for vector plots should be clipped.
     private Boolean logarithmic;          // True if we're using a log scale, false if linear and null if not specified
     private Range<Float> colorScaleRange; // The limits of the color scale. 
     
@@ -77,6 +78,7 @@ public class GetMapStyleRequest
         this.numContours = getNumContours(params);
         this.markerScale = getMarkerScale(params);
         this.markerSpacing = getMarkerSpacing(params);
+        this.markerClipping = getMarkerClipping(params);
         this.colorScaleRange = getColorScaleRange(params);
         this.logarithmic = isLogScale(params);
     }
@@ -279,7 +281,18 @@ public class GetMapStyleRequest
      */
     public static float getMarkerSpacing(RequestParams params) throws WmsException
     {
-        return params.getFloat("markerspacing", getMarkerScale(params));
+        return params.getFloat("markerspacing", 0.5f * getMarkerScale(params));
+    }
+
+    /**
+     * Extract the clipping flag of vector markers from the request parameters.
+     * @param params the request parameters.
+     * @return the requested clipping, or the default value true.
+     * @throws WmsException if the parameter value is invalid.
+     */
+    public static boolean getMarkerClipping(RequestParams params) throws WmsException
+    {
+        return params.getBoolean("markerclipping", false);
     }
 
     /**
@@ -383,6 +396,14 @@ public class GetMapStyleRequest
     public float getMarkerSpacing()
     {
         return markerSpacing;
+    }
+
+    /**
+     * Get the clipping of vector markers requested by the client.
+     */
+    public boolean getMarkerClipping()
+    {
+        return markerClipping;
     }
 
 }

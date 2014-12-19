@@ -6,7 +6,6 @@ import java.awt.Shape;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Area;
 import java.awt.geom.Path2D;
-import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.util.Arrays;
 
@@ -348,38 +347,47 @@ public class MarkerPlot {
      */
     public void draw(Graphics2D g2, AffineTransform transform)
     {
-        int i, j, k;
+        int k;
         float x, y;
         float c, a, s;
         Marker marker;
         Shape outline;
-        Area area;
-        Path2D boundary = null;
-        Shape clip = null;
-        Area coverage = null;
-        AffineTransform axes = new AffineTransform();
-        Area covering = new Area();
-        Rectangle2D bounds = new Rectangle2D.Float();
-        Point2D point = new Point2D.Float();
+        final Path2D boundary;
+        final Shape clip;
+        final AffineTransform axes = new AffineTransform();
+        final Rectangle2D bounds = (space != 0) ? new Rectangle2D.Float() : null;
+        final Area coverage = inner ? new Area() : null;
+        final boolean[] mask = new boolean[rows*cols];
         Color mc = color;
-        axes.setToScale(space, space);
-        bounds.add(style.marker(-0.5 * Math.PI, 1.0).getOutline(axes).getBounds2D());
-        bounds.add(style.marker( 0.0          , 1.0).getOutline(axes).getBounds2D());
-        bounds.add(style.marker( 0.5 * Math.PI, 1.0).getOutline(axes).getBounds2D());
-        bounds.add(style.marker(       Math.PI, 1.0).getOutline(axes).getBounds2D());
+        
+        if (space != 0)
+        {
+            axes.setToScale(space, space);
+            bounds.add(style.marker(-0.5 * Math.PI, 1.0).getOutline(axes).getBounds2D());
+            bounds.add(style.marker( 0.0          , 1.0).getOutline(axes).getBounds2D());
+            bounds.add(style.marker( 0.5 * Math.PI, 1.0).getOutline(axes).getBounds2D());
+            bounds.add(style.marker(       Math.PI, 1.0).getOutline(axes).getBounds2D());
+        }
         
         if (inner)
         {
             boundary = boundary(xpnts, ypnts, rows, cols);
-            boundary.transform(transform);
-            coverage = new Area(boundary);
+            if (transform != null)
+                boundary.transform(transform);
+            coverage.add(new Area(boundary));
             clip = g2.getClip();
             if (clip != null)
                 coverage.intersect(new Area(clip));
         }
         
-        for (i = 0; i < rows; i++)
-            for(j = 0; j < cols; j++)
+        if (space != 0 || inner)
+            layout(mask, xpnts, ypnts, apnts, spnts, rows, cols, style, scale,
+                   coverage, bounds, transform);
+        else
+            Arrays.fill(mask, true);
+        
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
             {
                 k = cols * i + j;
                 x = xpnts[k];
@@ -387,35 +395,24 @@ public class MarkerPlot {
                 c = cpnts[k];
                 a = apnts[k];
                 s = spnts[k];
-                if (! Float.isNaN(c) && ! Float.isNaN(a) && ! Float.isNaN(s))
+                if (mask[k] && ! Float.isNaN(a) && ! Float.isNaN(s))
                 {
-                    point.setLocation(x, y);
-                    if (transform != null)
-                        transform.transform(point, point);
-                    if (! covering.contains(point))
-                    {
-                        if (transform == null)
-                            axes.setToIdentity();
-                        else
-                            axes.setTransform(transform);
-                        axes.translate(x, y);
-                        area = new Area(axes.createTransformedShape(bounds));
-                        if (! inner || coverage.contains(area.getBounds2D()))
-                        {
-                            axes.scale(scale, scale);
-                            marker = style.marker(a, s);
-                            outline = marker.getOutline(axes);
-                            if (colormap != null)
-                                mc = colormap.getColorValue(c);
-                            if (mc != null)
-                                g2.setColor(mc);
-                            if (marker.fillable())
-                                g2.fill(outline);
-                            else if (marker.drawable())
-                                g2.draw(outline);
-                            covering.add(area);
-                        }
-                    }
+                    if (transform == null)
+                        axes.setToIdentity();
+                    else
+                        axes.setTransform(transform);
+                    axes.translate(x, y);
+                    axes.scale(scale, scale);
+                    marker = style.marker(a, s);
+                    outline = marker.getOutline(axes);
+                    if (colormap != null)
+                        mc = colormap.getColorValue(c);
+                    if (mc != null)
+                        g2.setColor(mc);
+                    if (marker.fillable())
+                        g2.fill(outline);
+                    else if (marker.drawable())
+                        g2.draw(outline);
                 }
             }
     }
@@ -465,6 +462,104 @@ public class MarkerPlot {
             boundary.closePath();
         }
         return boundary;
+    }
+    
+    
+    /**
+     * Decide which markers to render to avoid overlapping and/or clipping.
+     * @param xpnts horizontal position of the grid vertices.
+     * @param ypnts vertical position of the grid vertices.
+     * @param apnts angle data values at the grid vertices.
+     * @param spnts scale data values at the grid vertices.
+     * @param rows number of rows in the grid.
+     * @param cols number of columns in the grid.
+     * @param style the style of marker to use.
+     * @param scale the scale factor of the marker.
+     * @param coverage the area containing the entire markers to render, or null.
+     * @param bounds the bounds of non overlapping regions around markers.
+     * @param transform the transform defining the axis placement in the context.
+     * @param dst the mask to use, or null to create a new one.
+     * @return a boolean mask setting whether a marker should be plot at each vertex.
+     */
+    private static boolean[] layout(
+            boolean[] dst,
+            float[] xpnts, float[] ypnts, float[] apnts, float[] spnts,
+            int rows, int cols, MarkerStyle style, float scale,
+            Area coverage, Shape bounds, AffineTransform transform)
+    {
+        int k;
+        float x, y, a, s;
+        Marker marker;
+        Shape outline;
+        final AffineTransform axes = new AffineTransform();
+        final Rectangle2D inset = new Rectangle2D.Float();
+        final Area[] roverlap = new Area[rows];
+        final Area[] coverlap = new Area[cols];
+        final int[] rfst = new int[rows]; Arrays.fill(rfst, cols);
+        final int[] rlst = new int[rows]; Arrays.fill(rlst, -1);
+        final int[] rcnt = new int[rows]; Arrays.fill(rcnt, 0);
+        final int[] cfst = new int[cols]; Arrays.fill(cfst, rows);
+        final int[] clst = new int[cols]; Arrays.fill(clst, -1);
+        final int[] ccnt = new int[cols]; Arrays.fill(ccnt, 0);
+        final boolean[] mask = (dst == null) ? new boolean[rows*cols] : dst;
+        final boolean[] rask = new boolean[mask.length];
+        final boolean[] cask = new boolean[mask.length];
+        for (int i = 0; i < rows; i++)
+            roverlap[i] = new Area();
+        for (int j = 0; j < cols; j++)
+            coverlap[j] = new Area();
+        for (int i = 0, m = 0; m < rows; m++, i = rows - i - m % 2)
+            for (int j = 0, n = 0; n < cols; n++, j = cols - j - n % 2)
+            {
+                k = cols * i + j;
+                x = xpnts[k];
+                y = ypnts[k];
+                a = apnts[k];
+                s = spnts[k];
+                if (transform == null)
+                    axes.setToIdentity();
+                else
+                    axes.setTransform(transform);
+                axes.translate(x, y);
+                if (bounds != null) {
+                    inset.setRect(axes.createTransformedShape(bounds).getBounds2D());
+                } else if (coverage != null) {
+                    axes.scale(scale, scale);
+                    marker = style.marker(Float.isNaN(a) ? 0.0 : a ,
+                                          Float.isNaN(s) ? 1.0 : s);
+                    outline = marker.getOutline(axes);
+                    inset.setRect(outline.getBounds2D());
+                }
+                if (coverage == null || coverage.contains(inset)) {
+                    if (bounds == null || ! roverlap[i].intersects(inset)) {
+                        if (rfst[i] > j) rfst[i] = j;
+                        if (rlst[i] < j) rlst[i] = j;
+                        rcnt[i]++;
+                        roverlap[i].add(new Area(inset));
+                    }
+                    if (bounds == null || ! coverlap[j].intersects(inset)) {
+                        if (cfst[j] > i) cfst[j] = i;
+                        if (clst[j] < i) clst[j] = i;
+                        ccnt[j]++;
+                        coverlap[j].add(new Area(inset));
+                    }
+                }
+            }
+        Arrays.fill(rask, false);
+        for (int i = 0; i < rows; i++)
+            for (int o = rfst[i], l = (rlst[i] - rfst[i]), m = 0, n = rcnt[i], j = o;
+                 m < n;
+                 m++, j = (int)((float) o + (float) l / (float) (n - 1) * (float) m))
+                rask[cols * i + j] = true;
+        Arrays.fill(cask, false);
+        for (int j = 0; j < cols; j++)
+            for (int o = cfst[j], l = (clst[j] - cfst[j]), m = 0, n = ccnt[j], i = o;
+                 m < n;
+                 m++, i = (int)((float) o + (float) l / (float) (n - 1) * (float) m ))
+                cask[cols * i + j] = true;
+        for (int m = 0; m < mask.length; m++)
+            mask[m] = rask[m] & cask[m];
+        return mask;
     }
 
 }

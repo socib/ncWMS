@@ -89,6 +89,7 @@ public final class ImageProducer
     private int numContours;
     private float markerScale;
     private float markerSpacing;
+    private boolean markerClipping;
     
     // set of rendered images, ready to be turned into a picture
     private List<BufferedImage> renderedFrames = new ArrayList<BufferedImage>();
@@ -358,7 +359,7 @@ public final class ImageProducer
                                              markerColorMap, markerColor, markerStyle,
                                              markerScale * markerFactor,
                                              markerSpacing * markerFactor,
-                                             true);
+                                             markerClipping);
             plot.draw(graphics, mapGraphicsTransform);
         }
         if (label != null && !label.isEmpty()) {
@@ -613,6 +614,7 @@ public final class ImageProducer
         private ImageStyle style = null;
         private float markerScale = 14.0f;
         private float markerSpacing = 0.0f;
+        private boolean markerClipping = false;
         private int numContours = 10;
 
         /** Sets map grid (contains the size of the picture and the CRS) */
@@ -711,6 +713,13 @@ public final class ImageProducer
             return this;
         }
 
+        /** Sets the marker clipping. */
+        public Builder markerClipping(boolean clipping)
+        {
+            this.markerClipping = clipping;
+            return this;
+        }
+
         /** Sets the number of contours to use in the image, from 2 (default 10) */
         public Builder numContours(int numContours)
         {
@@ -762,6 +771,7 @@ public final class ImageProducer
             ip.imageGrid = this.imageGrid;
             ip.markerScale = this.markerScale;
             ip.markerSpacing = this.markerSpacing;
+            ip.markerClipping = this.markerClipping;
             ip.numContours = this.numContours;
             ip.style = this.style;
             ip.colorMap = new ColorMap(
