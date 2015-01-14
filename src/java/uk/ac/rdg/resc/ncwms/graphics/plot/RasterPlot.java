@@ -90,72 +90,58 @@ public class RasterPlot {
                                float[] xpnts, float[] ypnts, float[] cpnts,
                                int rows, int cols, ColorMap colormap)
     {
-        int nw, ne, sw, se;
-        float xsw, xse, xnw, xne, xss, xnn, xee, xww, xoo;
-        float ysw, yse, ynw, yne, yss, ynn, yee, yww, yoo;
-        float csw, cse, cnw, cne;
+        int ds, dn, dw, de;
+        int sw, se, nw, ne, ss, nn, ww, ee, oo;
+        float xsw, xse, xnw, xne, xss, xnn, xww, xee;
+        float ysw, yse, ynw, yne, yss, ynn, yww, yee;
+        float coo;
         Color c;
         Path2D.Float p = new Path2D.Float(Path2D.WIND_NON_ZERO, 4);
-        for (int i = 0; i < rows - 1; i++)
-            for(int j = 0; j < cols - 1; j++)
+        for (int i = 0; i < rows; i++)
+            for(int j = 0; j < cols; j++)
             {
-                sw = i * cols + j;
-                se = i * cols + j + 1;
-                nw = i * cols + j + cols;
-                ne = i * cols + j + cols + 1;
-                csw = cpnts[sw]; cse = cpnts[se]; cnw = cpnts[nw]; cne = cpnts[ne];
-                xsw = xpnts[sw]; xse = xpnts[se]; xnw = xpnts[nw]; xne = xpnts[ne];
-                ysw = ypnts[sw]; yse = ypnts[se]; ynw = ypnts[nw]; yne = ypnts[ne];
-                xss = 0.5f * (xsw + xse); xnn = 0.5f * (xnw + xne);
-                yss = 0.5f * (ysw + yse); ynn = 0.5f * (ynw + yne);
-                xww = 0.5f * (xnw + xsw); xee = 0.5f * (xne + xse);
-                yww = 0.5f * (ynw + ysw); yee = 0.5f * (yne + yse);
-                xoo = 0.25f * (xsw + xse + xnw + xne);
-                yoo = 0.25f * (ysw + yse + ynw + yne);
-                c = colormap.getColorValue(csw);
+                oo = i * cols + j;
+                coo = cpnts[oo];
+                c = colormap.getColorValue(coo);
                 if (c != null)
                 {
+                    ds = (i == 0) ? 0 : -cols;
+                    dn = (i == rows - 1) ? 0 : +cols;
+                    dw = (j == 0) ? 0 : -1;
+                    de = (j == cols - 1) ? 0 : +1;
+                    sw = oo + ds + dw;
+                    se = oo + ds + de;
+                    nw = oo + dn + dw;
+                    ne = oo + dn + de;
+                    ss = oo + ds;
+                    nn = oo + dn;
+                    ww = oo + dw;
+                    ee = oo + de;
+                    xsw = 0.25f * (xpnts[oo] + xpnts[ss] + xpnts[ww] + xpnts[sw]);
+                    xse = 0.25f * (xpnts[oo] + xpnts[ss] + xpnts[ee] + xpnts[se]);
+                    xnw = 0.25f * (xpnts[oo] + xpnts[nn] + xpnts[ww] + xpnts[nw]);
+                    xne = 0.25f * (xpnts[oo] + xpnts[nn] + xpnts[ee] + xpnts[ne]);
+                    xss = 0.5f * (xpnts[oo] + xpnts[ss]);
+                    xnn = 0.5f * (xpnts[oo] + xpnts[nn]);
+                    xww = 0.5f * (xpnts[oo] + xpnts[ww]);
+                    xee = 0.5f * (xpnts[oo] + xpnts[ee]);
+                    ysw = 0.25f * (ypnts[oo] + ypnts[ss] + ypnts[ww] + ypnts[sw]);
+                    yse = 0.25f * (ypnts[oo] + ypnts[ss] + ypnts[ee] + ypnts[se]);
+                    ynw = 0.25f * (ypnts[oo] + ypnts[nn] + ypnts[ww] + ypnts[nw]);
+                    yne = 0.25f * (ypnts[oo] + ypnts[nn] + ypnts[ee] + ypnts[ne]);
+                    yss = 0.5f * (ypnts[oo] + ypnts[ss]);
+                    ynn = 0.5f * (ypnts[oo] + ypnts[nn]);
+                    yww = 0.5f * (ypnts[oo] + ypnts[ww]);
+                    yee = 0.5f * (ypnts[oo] + ypnts[ee]);
                     p.reset();
-                    p.moveTo(xoo, yoo);
-                    p.lineTo(xww, yww);
-                    p.lineTo(xsw, ysw);
-                    p.lineTo(xss, yss);
-                    p.closePath();
-                    g2.setColor(c);
-                    g2.fill(p);
-                }
-                c = colormap.getColorValue(cse);
-                if (c != null)
-                {
-                    p.reset();
-                    p.moveTo(xoo, yoo);
+                    p.moveTo(xsw, ysw);
                     p.lineTo(xss, yss);
                     p.lineTo(xse, yse);
                     p.lineTo(xee, yee);
-                    p.closePath();
-                    g2.setColor(c);
-                    g2.fill(p);
-                }
-                c = colormap.getColorValue(cnw);
-                if (c != null)
-                {
-                    p.reset();
-                    p.moveTo(xoo, yoo);
+                    p.lineTo(xne, yne);
                     p.lineTo(xnn, ynn);
                     p.lineTo(xnw, ynw);
                     p.lineTo(xww, yww);
-                    p.closePath();
-                    g2.setColor(c);
-                    g2.fill(p);
-                }
-                c = colormap.getColorValue(cne);
-                if (c != null)
-                {
-                    p.reset();
-                    p.moveTo(xoo, yoo);
-                    p.lineTo(xee, yee);
-                    p.lineTo(xne, yne);
-                    p.lineTo(xnn, ynn);
                     p.closePath();
                     g2.setColor(c);
                     g2.fill(p);
