@@ -3,6 +3,7 @@ package uk.ac.rdg.resc.edal.coverage.grid.impl;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 
+import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -40,7 +41,7 @@ public class MapGridImpl implements MapGrid
     {
         mapExtent = targetGrid.getExtent();
         gridExtent = computeGridExtent(sourceGrid, mapExtent);
-        mapPoints = extractMapPoints(sourceGrid, gridExtent, mapExtent.getCoordinateReferenceSystem());
+        mapPoints = extractMapPoints(sourceGrid, gridExtent, mapExtent);
     }
 
     @Override
@@ -158,14 +159,14 @@ public class MapGridImpl implements MapGrid
     /**
      * Compute the extent of the subgrid of a grid that wraps a bounding box.
      * @param grid the source grid.
-     * @param bbox
+     * @param bbox the bounding box.
      * @return the extent of the wrapping subgrid.
      */
     private static GridEnvelope computeGridExtent(HorizontalGrid grid,
                                                   BoundingBox bbox)
     {
-        final CoordinateReferenceSystem sourceCRS = grid.getCoordinateReferenceSystem();
         final CoordinateReferenceSystem targetCRS = bbox.getCoordinateReferenceSystem();
+        final CoordinateReferenceSystem sourceCRS = grid.getCoordinateReferenceSystem();
         final CoordinateSystem sourceCS = sourceCRS.getCoordinateSystem();
         final double[] axisMinValues = {sourceCS.getAxis(0).getMinimumValue(),
                                         sourceCS.getAxis(1).getMinimumValue()};
@@ -247,10 +248,11 @@ public class MapGridImpl implements MapGrid
      */
     private static List<HorizontalPosition> extractMapPoints(HorizontalGrid sourceGrid,
                                                              GridEnvelope gridExtent,
-                                                             CoordinateReferenceSystem targetCRS)
+                                                             BoundingBox mapExtent)
     {
         if (gridExtent == null)
             return new ArrayList<HorizontalPosition>();
+        final CoordinateReferenceSystem targetCRS = mapExtent.getCoordinateReferenceSystem();
         final CoordinateReferenceSystem sourceCRS = sourceGrid.getCoordinateReferenceSystem();
         final CoordinateSystem sourceCS = sourceCRS.getCoordinateSystem();
         final double[] axisMinValues = {sourceCS.getAxis(0).getMinimumValue(),
@@ -272,12 +274,13 @@ public class MapGridImpl implements MapGrid
         final int[] minIndices = gridExtent.getLow().getCoordinateValues();
         final int[] maxIndices = gridExtent.getHigh().getCoordinateValues(); 
         final int size = gridExtent.getSpan(0) * gridExtent.getSpan(1);
+        final float[] xcrds = new float[size];
+        final float[] ycrds = new float[size];
         HorizontalPosition position;
         double[] coords = {0.0, 0.0};
-        List<HorizontalPosition> mapPoints = new ArrayList<HorizontalPosition>(size);
-        for (int i = minIndices[0]; i <= maxIndices[0]; i++)
+        for (int i = minIndices[0], k = 0; i <= maxIndices[0]; i++)
         {
-            for (int j = minIndices[1]; j <= maxIndices[1]; j++)
+            for (int j = minIndices[1]; j <= maxIndices[1]; j++, k++)
             {
                 position = sourceGrid.transformCoordinates(i, j);
                 coords[0] = position.getX();
@@ -292,10 +295,20 @@ public class MapGridImpl implements MapGrid
                     } catch (TransformException e) {
                         throw new RuntimeException(e);
                     }
-                mapPoints.add(new HorizontalPositionImpl(coords[0], coords[1], targetCRS));
+                xcrds[k] = (float) coords[0];
+                ycrds[k] = (float) coords[1];
             }
         }
-        return mapPoints;
+        return new AbstractList<HorizontalPosition>() {
+            @Override
+            public HorizontalPosition get(int index) {
+                return new HorizontalPositionImpl(xcrds[index], ycrds[index], targetCRS);
+            }
+            @Override
+            public int size() {
+                return size;
+            }
+        };
     }
 
 }
