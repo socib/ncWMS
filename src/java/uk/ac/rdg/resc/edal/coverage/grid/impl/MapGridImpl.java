@@ -199,7 +199,12 @@ public class MapGridImpl implements MapGrid
                 if (i < minBounds[0] || i > maxBounds[0] ||
                     j < minBounds[1] || j > maxBounds[1])
                 {
-                    position = grid.transformCoordinates(i, j);
+                    // The method transformCoordinates specified by interface
+                    // HorizontalGrid produces temporary objects for the bound 
+                    // checking in the case of rectilinear grids (because the 
+                    // grid extent is created on the fly instead of cached).
+                    // Use the unchecked version instead.
+                    position = ((AbstractHorizontalGrid) grid).transformCoordinatesNoBoundsCheck(i, j);
                     coords[0] = position.getX();
                     coords[1] = position.getY();
                     // To wrap (normalize) the coordinates we could use the modulo operation
@@ -274,15 +279,20 @@ public class MapGridImpl implements MapGrid
         final int[] minIndices = gridExtent.getLow().getCoordinateValues();
         final int[] maxIndices = gridExtent.getHigh().getCoordinateValues(); 
         final int size = gridExtent.getSpan(0) * gridExtent.getSpan(1);
-        final float[] xcrds = new float[size];
-        final float[] ycrds = new float[size];
+        final double[] xcrds = new double[size];
+        final double[] ycrds = new double[size];
         HorizontalPosition position;
         double[] coords = {0.0, 0.0};
         for (int i = minIndices[0], k = 0; i <= maxIndices[0]; i++)
         {
             for (int j = minIndices[1]; j <= maxIndices[1]; j++, k++)
             {
-                position = sourceGrid.transformCoordinates(i, j);
+                // The method transformCoordinates specified by interface
+                // HorizontalGrid produces temporary objects for the bound 
+                // checking in the case of rectilinear grids (because the 
+                // grid extent is created on the fly instead of cached).
+                // Use the unchecked version instead.
+                position = ((AbstractHorizontalGrid) sourceGrid).transformCoordinatesNoBoundsCheck(i, j);
                 coords[0] = position.getX();
                 coords[1] = position.getY();
                 if (axisWrap[0] && (coords[0] < axisMinValues[0] || coords[0] > axisMaxValues[0]))
@@ -295,8 +305,8 @@ public class MapGridImpl implements MapGrid
                     } catch (TransformException e) {
                         throw new RuntimeException(e);
                     }
-                xcrds[k] = (float) coords[0];
-                ycrds[k] = (float) coords[1];
+                xcrds[k] = coords[0];
+                ycrds[k] = coords[1];
             }
         }
         return new AbstractList<HorizontalPosition>() {

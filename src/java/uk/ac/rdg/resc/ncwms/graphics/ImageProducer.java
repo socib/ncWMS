@@ -314,16 +314,19 @@ public final class ImageProducer
         AffineTransform mapGraphicsTransform = getMapImageGraphicsTransform();
         
         // Extract the data to plot.
+        logger.debug("Extracting data to plot the map.");
         int size[] = {0, 0};
+        double mres[] = {getMapWidth() / getImageWidth(), getMapHeight()/getImageHeight()};
         List<float[]> crds = new ArrayList<float[]>();
         List<float[]> data = new ArrayList<float[]>();
         List<List<Float>> cmps = new ArrayList<List<Float>>();
         cmps.add(comps.getMagnitudes());
         if (style.isMarker())
             cmps.add(comps.getAngles());
-        extractPlotData(cmps, data, crds, size);
+        extractPlotData(layerGrid, cmps, mres, data, crds, size);
         
         // Plot the data.
+        logger.debug("Plotting the map.");
         if (style.isRaster())
         {
             RasterStyle rasterFillStyle = style.getRasterStyle();
@@ -362,6 +365,9 @@ public final class ImageProducer
                                              markerClipping);
             plot.draw(graphics, mapGraphicsTransform);
         }
+
+        // Add the label.
+        logger.debug("Adding the map label.");
         if (label != null && !label.isEmpty()) {
             Label caption = new Label(
                     label, 10, image.getHeight() - 5, new Color(255, 151, 0), graphics.getFont(),
@@ -547,51 +553,118 @@ public final class ImageProducer
     }
 
     /**
-     * Extract the subgrid with the data to plot.
+     * Extract a possibly sub-sampled subgrid with the data to plot.
      * 
-     * This is the counterpart of the hack in PixelMap to extract the values
+     * This is the complement of the hack in PixelMap to extract the values
      * of the layer at the vertices of the subgrid that cover the bounding box
-     * of the map.
+     * of the map. In addition, the data is sub-sampled using a constant step
+     * along each axis if the largest space between neighboring vertices
+     * is less than the space spanned by a pixel along that axis.
+     * @param grid the horizontal grid of the layer.
      * @param cmps the values of the layer components as extracted by the PixelMap hack.
-     * @param crds the coordinates of the vertices of the subgrid in the requested map reference system.
+     * @param mres the map resolution along each image axis (map axis units per pixel).
      * @param data the values of the layer at the vertices of the subgrid.
-     * @param shape the shape of the subgrid.
+     * @param crds the coordinates of the vertices of the subgrid.
+     * @param size the shape of the subgrid.
      * @throws WmsException if there is no transformation between the layer's and the map reference systems. 
      */
-    private void extractPlotData(List<List<Float>> cmps,
-                                 List<float[]> data, List<float[]> crds,
-                                 int[] shape) throws WmsException
+    private static void extractPlotData(HorizontalGrid grid, List<List<Float>> cmps, double[] mres,
+                                        List<float[]> data, List<float[]> crds, int[] size)
+        throws WmsException
     {
-        if (layerGrid.getGridExtent() == null)
+        // Get the points and the shape of the original grid.
+        final List<HorizontalPosition> points;
+        final int[] span = new int[2];
+        final int total;
+        if (grid == null || grid.getGridExtent() == null)
         {
-            shape[0] = 0;
-            shape[1] = 0;
+            points = null;
+            span[0] = span[1] = 0;
+            total = 0;
         }
         else
         {
-            shape[0] = layerGrid.getGridExtent().getSpan(0);
-            shape[1] = layerGrid.getGridExtent().getSpan(1);
+            points = grid.getDomainObjects();
+            span[0] = grid.getGridExtent().getSpan(0);
+            span[1] = grid.getGridExtent().getSpan(1);
+            total = span[0] * span[1];
         }
-        final int size = shape[0] * shape[1];
-        for (List<Float> component : cmps)
+        // Compute the step along each grid axis as the minimum
+        // of the ratios of the desired resolutions along each map axis
+        // over the largest space along that map axis
+        // between vertices along that grid axis
+        final int[] step = new int[2];
+        if (mres == null || grid == null)
         {
-            float[] values = new float[size];
-            int index = 0;
-            for (Float value : component)
-                values[index++] = (value == null) ? Float.NaN : value;
-            data.add(values);
+            step[0] = 1;
+            step[1] = 1;
         }
-        float[] xcrd = new float[size];
-        float[] ycrd = new float[size];
-        int index = 0;
-        for (HorizontalPosition position : layerGrid.getDomainObjects())
+        else
         {
-            xcrd[index] = (float) position.getX();
-            ycrd[index] = (float) position.getY();
-            index++;
+            // Compute the largest space between vertices of the grid
+            // along each map and grid axis.
+            final double[] xpre = new double[span[1]];
+            final double[] ypre = new double[span[1]];
+            final double[] xdel = {Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY};
+            final double[] ydel = {Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY};
+            final double[] xres = {Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY};
+            final double[] yres = {Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY};
+            double xpnt, ypnt;
+            for (int index = 0, i = 0, j = 0;
+                 index < total;
+                 index++, i = index / span[1], j = index % span[1])
+            {
+                HorizontalPosition point = points.get(index);
+                xpnt = point.getX();
+                ypnt = point.getY();
+                xdel[0] = (i == 0) ? Double.NEGATIVE_INFINITY : Math.abs(xpnt - xpre[j]);
+                xdel[1] = (j == 0) ? Double.NEGATIVE_INFINITY : Math.abs(xpnt - xpre[j-1]);
+                ydel[0] = (i == 0) ? Double.NEGATIVE_INFINITY : Math.abs(ypnt - ypre[j]);
+                ydel[1] = (j == 0) ? Double.NEGATIVE_INFINITY : Math.abs(ypnt - ypre[j-1]);
+                if (xdel[0] > xres[0]) xres[0] = xdel[0];
+                if (xdel[1] > xres[1]) xres[1] = xdel[1];
+                if (ydel[0] > yres[0]) yres[0] = ydel[0];
+                if (ydel[1] > yres[1]) yres[1] = ydel[1];
+                xpre[j] = xpnt;
+                ypre[j] = ypnt;
+            }
+            // Compute the step along each axis.
+            step[0] = Math.max(1, (int) Math.min(mres[0] / xres[0], mres[1] / yres[0]));
+            step[1] = Math.max(1, (int) Math.min(mres[0] / xres[1], mres[1] / yres[1]));
+        }
+        // Compute the size of the sub-sampled grid.
+        size[0] = span[0] / step[0] + (span[0] % step[0] == 0 ? 0 : 1);
+        size[1] = span[1] / step[1] + (span[1] % step[1] == 0 ? 0 : 1);
+        logger.debug("Extracting plot data: {} x {} of {} x {} points.",
+                     new Object[]{size[0], size[1], span[0], span[1]});
+        // Extract the coordinates of the vertices of the subgrid.
+        final int count = size[0] * size[1];
+        final float[] xcrd = new float[count];
+        final float[] ycrd = new float[count];
+        for (int index = 0, i = 0, j = 0;
+             index < count;
+             index++, i = index / size[1], j = index % size[1])
+        {
+            HorizontalPosition point = points.get(i * step[0] * span[1] + j * step[1]);
+            xcrd[index] = (float) point.getX();
+            ycrd[index] = (float) point.getY();
         }
         crds.add(xcrd);
         crds.add(ycrd);
+        // Extract the values of the components of the layer
+        // at the vertices of the subgrid.
+        for (List<Float> component : cmps)
+        {
+            final float[] values = new float[count];
+            for (int index = 0, i = 0, j = 0;
+                 index < count;
+                 index++, i = index / size[1], j = index % size[1])
+            {
+                Float value = component.get(i * step[0] * span[1] + j * step[1]);
+                values[index] = (value == null) ? Float.NaN : value;
+            }
+            data.add(values);
+        }
     }
 
     /**

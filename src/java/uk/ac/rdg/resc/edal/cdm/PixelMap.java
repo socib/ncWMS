@@ -176,11 +176,13 @@ public final class PixelMap implements Iterable<PixelMap.PixelMapEntry>
         }
 
         long start = System.currentTimeMillis();
+
+
         if (targetDomain instanceof MapGrid)
         {
+            // Hack to force new data loading behavior for the generation of the map.
             this.initFromMapGrid(sourceGrid, (MapGrid) targetDomain);
-        }
-        else if (sourceGrid instanceof RectilinearGrid && targetDomain instanceof RectilinearGrid &&
+        } else  if (sourceGrid instanceof RectilinearGrid && targetDomain instanceof RectilinearGrid &&
             Utils.isWgs84LonLat(sourceGrid.getCoordinateReferenceSystem()) &&
             Utils.isWgs84LonLat(targetDomain.getCoordinateReferenceSystem()))
         {
@@ -207,7 +209,8 @@ public final class PixelMap implements Iterable<PixelMap.PixelMapEntry>
             }
         }
 
-        this.sortIndices();
+        if (! (targetDomain instanceof MapGrid))
+            this.sortIndices();
 
         logger.debug("Built pixel map in {} ms", System.currentTimeMillis() - start);
     }
@@ -369,20 +372,22 @@ public final class PixelMap implements Iterable<PixelMap.PixelMapEntry>
      * @param sourceGrid The source grid
      * @param targetGrid The target grid
      */
-    public void initFromMapGrid(HorizontalGrid sourceGrid, MapGrid targetGrid)
+    private void initFromMapGrid(HorizontalGrid sourceGrid, MapGrid targetGrid)
     {
         if (targetGrid.getGridExtent() == null)
             return;
 
-        int[] minIndices = targetGrid.getGridExtent().getLow().getCoordinateValues();
-        int[] maxIndices = targetGrid.getGridExtent().getHigh().getCoordinateValues(); 
-        int index = 0;
-        for (int i = minIndices[0]; i <= maxIndices[0]; i++)
+        final int[] minIndices = targetGrid.getGridExtent().getLow().getCoordinateValues();
+        final int[] maxIndices = targetGrid.getGridExtent().getHigh().getCoordinateValues();
+        final int[] offs = {minIndices[0], minIndices[1]};
+        final int[] step = {maxIndices[1] - minIndices[1] + 1, 1};
+        for (int j = minIndices[1]; j <= maxIndices[1]; j++)
         {
-            for (int j = minIndices[1]; j <= maxIndices[1]; j++)
+            for (int i = minIndices[0]; i <= maxIndices[0]; i++)
             {
                 this.sourceGridIndices.append(j * sourceGridISize + i);
-                this.targetGridIndices.append(index++);
+                this.targetGridIndices.append((i - offs[0]) * step[0] +
+                                              (j - offs[1]) * step[1]);
             }
         }
         this.minIIndex = minIndices[0];
