@@ -31,33 +31,30 @@ package uk.ac.rdg.resc.edal.cdm;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+
 import org.geotoolkit.metadata.iso.extent.DefaultGeographicBoundingBox;
 import org.geotoolkit.referencing.crs.DefaultGeographicCRS;
 import org.opengis.coverage.grid.GridCoordinates;
-import org.opengis.coverage.grid.GridEnvelope;
-import org.opengis.referencing.crs.CoordinateReferenceSystem;
 import org.opengis.referencing.operation.TransformException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import uk.ac.rdg.resc.edal.coverage.domain.Domain;
 import uk.ac.rdg.resc.edal.coverage.grid.HorizontalGrid;
-import uk.ac.rdg.resc.edal.coverage.grid.MapGrid;
 import uk.ac.rdg.resc.edal.coverage.grid.RectilinearGrid;
 import uk.ac.rdg.resc.edal.coverage.grid.ReferenceableAxis;
 import uk.ac.rdg.resc.edal.coverage.grid.RegularAxis;
 import uk.ac.rdg.resc.edal.coverage.grid.RegularGrid;
+import uk.ac.rdg.resc.edal.coverage.grid.impl.MapGridImpl;
 import uk.ac.rdg.resc.edal.coverage.grid.impl.RegularAxisImpl;
 import uk.ac.rdg.resc.edal.coverage.grid.impl.RegularGridImpl;
-import uk.ac.rdg.resc.edal.geometry.BoundingBox;
 import uk.ac.rdg.resc.edal.geometry.HorizontalPosition;
 import uk.ac.rdg.resc.edal.util.RArray;
-import uk.ac.rdg.resc.edal.util.RUIntArray;
 import uk.ac.rdg.resc.edal.util.RLongArray;
 import uk.ac.rdg.resc.edal.util.RUByteArray;
+import uk.ac.rdg.resc.edal.util.RUIntArray;
 import uk.ac.rdg.resc.edal.util.RUShortArray;
 import uk.ac.rdg.resc.edal.util.Utils;
-import static java.lang.Math.min;
-import static java.lang.Math.max;
 
 /**
  *<p>Maps real-world points to i and j indices of corresponding
@@ -178,10 +175,10 @@ public final class PixelMap implements Iterable<PixelMap.PixelMapEntry>
         long start = System.currentTimeMillis();
 
 
-        if (targetDomain instanceof MapGrid)
+        if (targetDomain instanceof MapGridImpl)
         {
             // Hack to force new data loading behavior for the generation of the map.
-            this.initFromMapGrid(sourceGrid, (MapGrid) targetDomain);
+            this.initFromMapGrid(sourceGrid, (MapGridImpl) targetDomain);
         } else  if (sourceGrid instanceof RectilinearGrid && targetDomain instanceof RectilinearGrid &&
             Utils.isWgs84LonLat(sourceGrid.getCoordinateReferenceSystem()) &&
             Utils.isWgs84LonLat(targetDomain.getCoordinateReferenceSystem()))
@@ -209,7 +206,7 @@ public final class PixelMap implements Iterable<PixelMap.PixelMapEntry>
             }
         }
 
-        if (! (targetDomain instanceof MapGrid))
+        if (! (targetDomain instanceof MapGridImpl))
             this.sortIndices();
 
         logger.debug("Built pixel map in {} ms", System.currentTimeMillis() - start);
@@ -372,28 +369,26 @@ public final class PixelMap implements Iterable<PixelMap.PixelMapEntry>
      * @param sourceGrid The source grid
      * @param targetGrid The target grid
      */
-    private void initFromMapGrid(HorizontalGrid sourceGrid, MapGrid targetGrid)
+    private void initFromMapGrid(HorizontalGrid sourceGrid, MapGridImpl targetGrid)
     {
-        if (targetGrid.getGridExtent() == null)
-            return;
-
-        final int[] minIndices = targetGrid.getGridExtent().getLow().getCoordinateValues();
-        final int[] maxIndices = targetGrid.getGridExtent().getHigh().getCoordinateValues();
-        final int[] offs = {minIndices[0], minIndices[1]};
-        final int[] step = {maxIndices[1] - minIndices[1] + 1, 1};
-        for (int j = minIndices[1]; j <= maxIndices[1]; j++)
+        final int[] offset = {targetGrid.getSubgridOffset(0), targetGrid.getSubgridOffset(1)};
+        final int[] stride = {targetGrid.getSubgridStride(0), targetGrid.getSubgridStride(1)};
+        final int[] length = {targetGrid.getSubgridLength(0), targetGrid.getSubgridLength(1)};
+        if (length[0] * length[1] > 0)
         {
-            for (int i = minIndices[0]; i <= maxIndices[0]; i++)
+            this.minIIndex = offset[0];
+            this.maxIIndex = offset[0] + stride[0] * (length[0] - 1);
+            this.minJIndex = offset[1];
+            this.maxJIndex = offset[1] + stride[1] * (length[1] - 1);
+            for (int j = this.minJIndex, k = 0; j <= this.maxJIndex; j += stride[1])
             {
-                this.sourceGridIndices.append(j * sourceGridISize + i);
-                this.targetGridIndices.append((i - offs[0]) * step[0] +
-                                              (j - offs[1]) * step[1]);
+                for (int i = this.minIIndex; i <= this.maxIIndex; i += stride[0], k++)
+                {
+                    this.sourceGridIndices.append(j * sourceGridISize + i);
+                    this.targetGridIndices.append(k);
+                }
             }
         }
-        this.minIIndex = minIndices[0];
-        this.maxIIndex = maxIndices[0];
-        this.minJIndex = minIndices[1];
-        this.maxJIndex = maxIndices[1];
     }
 
     /**

@@ -54,6 +54,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import uk.ac.rdg.resc.edal.coverage.grid.HorizontalGrid;
+import uk.ac.rdg.resc.edal.coverage.grid.RegularGrid;
 import uk.ac.rdg.resc.edal.geometry.HorizontalPosition;
 import uk.ac.rdg.resc.edal.util.Range;
 import uk.ac.rdg.resc.edal.util.Ranges;
@@ -83,7 +84,7 @@ public final class ImageProducer
     
     private ImageStyle style;
     private HorizontalGrid layerGrid;
-    private HorizontalGrid imageGrid;
+    private RegularGrid imageGrid;
     private ColorMap colorMap;
     private boolean autoScale;
     private int numContours;
@@ -562,106 +563,44 @@ public final class ImageProducer
      * is less than the space spanned by a pixel along that axis.
      * @param grid the horizontal grid of the layer.
      * @param cmps the values of the layer components as extracted by the PixelMap hack.
-     * @param mres the map resolution along each image axis (map axis units per pixel).
      * @param data the values of the layer at the vertices of the subgrid.
      * @param crds the coordinates of the vertices of the subgrid.
-     * @param size the shape of the subgrid.
+     * @param size the shape of the subgrid (length of each axis of the subgrid).
      * @throws WmsException if there is no transformation between the layer's and the map reference systems. 
      */
     private static void extractPlotData(HorizontalGrid grid, List<List<Float>> cmps, double[] mres,
                                         List<float[]> data, List<float[]> crds, int[] size)
         throws WmsException
     {
-        // Get the points and the shape of the original grid.
-        final List<HorizontalPosition> points;
-        final int[] span = new int[2];
-        final int total;
-        if (grid == null || grid.getGridExtent() == null)
-        {
-            points = null;
-            span[0] = span[1] = 0;
-            total = 0;
-        }
-        else
-        {
-            points = grid.getDomainObjects();
-            span[0] = grid.getGridExtent().getSpan(0);
-            span[1] = grid.getGridExtent().getSpan(1);
-            total = span[0] * span[1];
-        }
-        // Compute the step along each grid axis as the minimum
-        // of the ratios of the desired resolutions along each map axis
-        // over the largest space along that map axis
-        // between vertices along that grid axis
-        final int[] step = new int[2];
-        if (mres == null || grid == null)
-        {
-            step[0] = 1;
-            step[1] = 1;
-        }
-        else
-        {
-            // Compute the largest space between vertices of the grid
-            // along each map and grid axis.
-            final double[] xpre = new double[span[1]];
-            final double[] ypre = new double[span[1]];
-            final double[] xdel = {Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY};
-            final double[] ydel = {Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY};
-            final double[] xres = {Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY};
-            final double[] yres = {Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY};
-            double xpnt, ypnt;
-            for (int index = 0, i = 0, j = 0;
-                 index < total;
-                 index++, i = index / span[1], j = index % span[1])
-            {
-                HorizontalPosition point = points.get(index);
-                xpnt = point.getX();
-                ypnt = point.getY();
-                xdel[0] = (i == 0) ? Double.NEGATIVE_INFINITY : Math.abs(xpnt - xpre[j]);
-                xdel[1] = (j == 0) ? Double.NEGATIVE_INFINITY : Math.abs(xpnt - xpre[j-1]);
-                ydel[0] = (i == 0) ? Double.NEGATIVE_INFINITY : Math.abs(ypnt - ypre[j]);
-                ydel[1] = (j == 0) ? Double.NEGATIVE_INFINITY : Math.abs(ypnt - ypre[j-1]);
-                if (xdel[0] > xres[0]) xres[0] = xdel[0];
-                if (xdel[1] > xres[1]) xres[1] = xdel[1];
-                if (ydel[0] > yres[0]) yres[0] = ydel[0];
-                if (ydel[1] > yres[1]) yres[1] = ydel[1];
-                xpre[j] = xpnt;
-                ypre[j] = ypnt;
-            }
-            // Compute the step along each axis.
-            step[0] = Math.max(1, (int) Math.min(mres[0] / xres[0], mres[1] / yres[0]));
-            step[1] = Math.max(1, (int) Math.min(mres[0] / xres[1], mres[1] / yres[1]));
-        }
-        // Compute the size of the sub-sampled grid.
-        size[0] = span[0] / step[0] + (span[0] % step[0] == 0 ? 0 : 1);
-        size[1] = span[1] / step[1] + (span[1] % step[1] == 0 ? 0 : 1);
-        logger.debug("Extracting plot data: {} x {} of {} x {} points.",
-                     new Object[]{size[0], size[1], span[0], span[1]});
-        // Extract the coordinates of the vertices of the subgrid.
+        // PixelMap and AbstactHorizontal grid do not use the same contiguous
+        // indexing order than GridEnvelopImpl but the transposed (ugh!),
+        // and this is assumed by DataReadingStrategy SCANLINE.
+        // So the order of entries in cmps and points in grid is transposed.
+        size[0] = grid.getGridExtent().getSpan(1);
+        size[1] = grid.getGridExtent().getSpan(0);
         final int count = size[0] * size[1];
         final float[] xcrd = new float[count];
         final float[] ycrd = new float[count];
-        for (int index = 0, i = 0, j = 0;
-             index < count;
-             index++, i = index / size[1], j = index % size[1])
+        int index = 0;
+        // Extract the coordinates of the vertices of the subgrid.
+        for (HorizontalPosition p : grid.getDomainObjects())
         {
-            HorizontalPosition point = points.get(i * step[0] * span[1] + j * step[1]);
-            xcrd[index] = (float) point.getX();
-            ycrd[index] = (float) point.getY();
+            xcrd[index] = (float) p.getX();
+            ycrd[index] = (float) p.getY();
+            index++;
         }
         crds.add(xcrd);
         crds.add(ycrd);
         // Extract the values of the components of the layer
         // at the vertices of the subgrid.
-        for (List<Float> component : cmps)
+        for (List<Float> cmp : cmps)
         {
             final float[] values = new float[count];
-            for (int index = 0, i = 0, j = 0;
-                 index < count;
-                 index++, i = index / size[1], j = index % size[1])
+            index = 0;
+            for (Float v : cmp)
             {
-                Float value = component.get(i * step[0] * span[1] + j * step[1]);
-                values[index] = (value == null) ? Float.NaN : value;
+                values[index] = (v == null) ? Float.NaN : v;
+                index++;
             }
             data.add(values);
         }
@@ -673,7 +612,7 @@ public final class ImageProducer
      */
     public static final class Builder
     {
-        private HorizontalGrid imageGrid;
+        private RegularGrid imageGrid;
         private HorizontalGrid layerGrid;
         private ColorPalette colorPalette = null;
         private int numColorBands = ColorMap.MAX_NUM_COLORS;
@@ -691,7 +630,7 @@ public final class ImageProducer
         private int numContours = 10;
 
         /** Sets map grid (contains the size of the picture and the CRS) */
-        public Builder imageGrid(HorizontalGrid imageGrid)
+        public Builder imageGrid(RegularGrid imageGrid)
         {
             this.imageGrid = imageGrid;
             return this;

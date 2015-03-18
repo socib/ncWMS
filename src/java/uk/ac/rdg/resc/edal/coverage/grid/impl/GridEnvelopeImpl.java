@@ -61,7 +61,7 @@ public final class GridEnvelopeImpl implements GridEnvelope {
                 "GridCoordinates must be equal");
         }
         for (int i = 0; i < low.getDimension(); i++) {
-            if (high.getCoordinateValue(i) < low.getCoordinateValue(i)) {
+            if (high.getCoordinateValue(i) < low.getCoordinateValue(i) - 1) {
                 String msg = String.format("High coordinate at index %d is lower"
                     + " than the low coordinate", i);
                 throw new IllegalArgumentException(msg);

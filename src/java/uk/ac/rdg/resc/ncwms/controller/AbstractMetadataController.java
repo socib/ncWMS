@@ -38,6 +38,7 @@ import java.util.Set;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 import org.joda.time.Duration;
@@ -47,7 +48,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.web.servlet.ModelAndView;
 
 import uk.ac.rdg.resc.edal.coverage.grid.HorizontalGrid;
-import uk.ac.rdg.resc.edal.coverage.grid.MapGrid;
 import uk.ac.rdg.resc.edal.coverage.grid.RegularGrid;
 import uk.ac.rdg.resc.edal.coverage.grid.impl.MapGridImpl;
 import uk.ac.rdg.resc.edal.util.Range;
@@ -307,7 +307,7 @@ public abstract class AbstractMetadataController
         // Get the grid onto which the data is being projected
         RegularGrid imageGrid = WmsUtils.getImageGrid(dr);
         HorizontalGrid layerGrid = layer.getHorizontalGrid();
-        MapGrid mapGrid = new MapGridImpl(layerGrid, imageGrid);
+        MapGridImpl mapGrid = new MapGridImpl(layerGrid, imageGrid);
         
         // Get the value on the z axis
         double zValue = AbstractWmsController.getElevationValue(dr.getElevationString(), layer);

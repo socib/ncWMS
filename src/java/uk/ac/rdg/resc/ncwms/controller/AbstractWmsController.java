@@ -65,7 +65,6 @@ import uk.ac.rdg.resc.edal.coverage.domain.Domain;
 import uk.ac.rdg.resc.edal.coverage.domain.impl.HorizontalDomain;
 import uk.ac.rdg.resc.edal.coverage.grid.GridCoordinates;
 import uk.ac.rdg.resc.edal.coverage.grid.HorizontalGrid;
-import uk.ac.rdg.resc.edal.coverage.grid.MapGrid;
 import uk.ac.rdg.resc.edal.coverage.grid.RegularGrid;
 import uk.ac.rdg.resc.edal.coverage.grid.impl.MapGridImpl;
 import uk.ac.rdg.resc.edal.geometry.HorizontalPosition;
@@ -80,7 +79,6 @@ import uk.ac.rdg.resc.ncwms.exceptions.InvalidDimensionValueException;
 import uk.ac.rdg.resc.ncwms.exceptions.InvalidFormatException;
 import uk.ac.rdg.resc.ncwms.exceptions.InvalidUpdateSequence;
 import uk.ac.rdg.resc.ncwms.exceptions.LayerNotDefinedException;
-import uk.ac.rdg.resc.ncwms.exceptions.StyleNotDefinedException;
 import uk.ac.rdg.resc.ncwms.exceptions.Wms1_1_1Exception;
 import uk.ac.rdg.resc.ncwms.exceptions.WmsException;
 import uk.ac.rdg.resc.ncwms.graphics.ColorPalette;
@@ -441,7 +439,7 @@ public abstract class AbstractWmsController extends AbstractController {
         // Get the grid onto which the data will be projected
         RegularGrid imageGrid = WmsUtils.getImageGrid(dataRequest);
         HorizontalGrid layerGrid = layer.getHorizontalGrid();
-        MapGrid mapGrid = new MapGridImpl(layerGrid, imageGrid);
+        MapGridImpl mapGrid = new MapGridImpl(layerGrid, imageGrid);
 
         // Create an object that will turn data into BufferedImages
         Range<Float> scaleRange = styleRequest.getColorScaleRange();
