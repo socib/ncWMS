@@ -531,23 +531,27 @@ public final class ImageProducer
      */
     private NumberFormat getNumberFormat(int digits)
     {
-        double absa = Math.abs(colorMap.getScaleMin());
-        double absb = Math.abs(colorMap.getScaleMax());
-        double absmax = Math.max(absa, absb);
-        int ordmax = (int) Math.floor(Math.log10(absmax));
+        final double absa = Math.abs(colorMap.getScaleMin());
+        final double absb = Math.abs(colorMap.getScaleMax());
+        final double absmax = Math.max(absa, absb);
+        final int ordmax = absmax == 0 ? 0 : (int) Math.floor(Math.log10(absmax));
         String integer, fraction, exponent, pattern;
-        if (-digits < ordmax - 1 && ordmax + 1 < digits) {
+        if (ordmax >= digits || ordmax <= -digits + 1) {
             integer = "0";
-            fraction = "." + new String(new char[digits - ordmax - 1]).replace("\0", "#");
-            exponent = "";
-        } else if (ordmax + 1 == digits) {
+            fraction = "." + new String(new char[digits - 1]).replace("\0", "0");
+            exponent = "E0";
+        } else if (ordmax == digits - 1) {
             integer = "0";
             fraction = "";
             exponent = "";
+        } else if (ordmax > 0) {
+            integer = "0";
+            fraction = "." + new String(new char[digits - 1 - ordmax]).replace("\0", "#");
+            exponent = "";
         } else {
             integer = "0";
-            fraction = "." + new String(new char[digits-1]).replace("\0", "#");
-            exponent = "E0";
+            fraction = "." + new String(new char[digits - 1]).replace("\0", "#");
+            exponent = "";
         }
         pattern = integer + fraction + exponent;
         return new DecimalFormat(" " + pattern + ";" + "-" + pattern);
