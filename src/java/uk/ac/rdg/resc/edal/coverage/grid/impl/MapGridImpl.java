@@ -77,12 +77,14 @@ public class MapGridImpl extends AbstractHorizontalGrid implements RegularGrid
         } catch (FactoryException e) {
             throw new RuntimeException(e);
         }
+        this.axisAround[0] = sourceCS.getAxis(0).getRangeMeaning().equals(RangeMeaning.WRAPAROUND) && ! Double.isInfinite(axisLength[0]);
+        this.axisAround[1] = sourceCS.getAxis(1).getRangeMeaning().equals(RangeMeaning.WRAPAROUND) && ! Double.isInfinite(axisLength[1]);
         this.axisMinVal[0] = sourceCS.getAxis(0).getMinimumValue();
         this.axisMinVal[1] = sourceCS.getAxis(1).getMinimumValue();
         this.axisMaxVal[0] = sourceCS.getAxis(0).getMaximumValue();
         this.axisMaxVal[1] = sourceCS.getAxis(1).getMaximumValue();
-        this.axisAround[0] = sourceCS.getAxis(0).getRangeMeaning().equals(RangeMeaning.WRAPAROUND) && ! Double.isInfinite(axisLength[0]);
-        this.axisAround[1] = sourceCS.getAxis(1).getRangeMeaning().equals(RangeMeaning.WRAPAROUND) && ! Double.isInfinite(axisLength[1]);
+        this.axisLength[0] = axisMaxVal[0] - axisMinVal[0];
+        this.axisLength[1] = axisMaxVal[1] - axisMinVal[1];
         final int[] minIndices = sourceGrid.getGridExtent().getLow().getCoordinateValues();
         final int[] maxIndices = sourceGrid.getGridExtent().getHigh().getCoordinateValues(); 
         final double[] minCoords = targetGrid.getExtent().getLowerCorner().getCoordinate();
