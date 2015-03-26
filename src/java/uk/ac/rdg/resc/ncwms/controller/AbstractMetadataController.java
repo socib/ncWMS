@@ -334,7 +334,10 @@ public abstract class AbstractMetadataController
             throw new IllegalStateException("Invalid Layer type");
         }
 
-        Range<Float> valueRange = Ranges.findMinMax(magnitudes);
+        Range<Float> valueRange = 
+            magnitudes.isEmpty() ? Ranges.newRange((Float) null, (Float) null)
+                                 : Ranges.findMinMax(magnitudes);
+
         return new ModelAndView("showMinMax", "valueRange", valueRange);
     }
 
