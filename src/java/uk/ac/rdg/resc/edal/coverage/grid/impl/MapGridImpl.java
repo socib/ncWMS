@@ -368,6 +368,11 @@ public class MapGridImpl extends AbstractHorizontalGrid implements RegularGrid
             }
             xres[i] = (i == 0) ? ares : 0;
             yres[i] = (i == 0) ? 0 : ares;
+            if (minBounds[i] <= maxBounds[i])
+            {
+                minBounds[i] = Math.max(minBounds[i] - 1, minIndices[i]);
+                maxBounds[i] = Math.min(maxBounds[i] + 1, maxIndices[i]);
+            }
         }
     }
 
