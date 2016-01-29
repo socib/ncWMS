@@ -139,6 +139,7 @@ public abstract class AbstractWmsController extends AbstractController {
         // directory containing the palettes.  Therefore we need a way of 
         // getting at the ServletContext object, which isn't available from
         // the ColorPalette class.
+        try {
         File paletteLocationDir = this.serverConfig.getPaletteFilesLocation(
             this.getServletContext());
         if (paletteLocationDir != null && paletteLocationDir.exists()
@@ -147,6 +148,9 @@ public abstract class AbstractWmsController extends AbstractController {
         } else {
             log.info("Directory of palette files does not exist or is not a directory");
         }
+        } catch (Exception e) {
+            log.error("Problem finding directory of colour palettes", e);
+    }
     }
 
     /**
@@ -334,7 +338,7 @@ public abstract class AbstractWmsController extends AbstractController {
             // stuff about polar stereographic projections
             "EPSG:3408", // NSIDC EASE-Grid North
             "EPSG:3409", // NSIDC EASE-Grid South
-            "EPSG:3857", // Google Maps
+            "EPSG:3857", "EPSG:900913", // Google Maps
             "EPSG:32661", // North Polar stereographic
             "EPSG:32761" // South Polar stereographic
         };
@@ -454,7 +458,7 @@ public abstract class AbstractWmsController extends AbstractController {
         if (styles.length > 0)
         {
             String[] styleStrEls = styles[0].split("/");
-            styleName = styleStrEls[0];
+           styleName = styleStrEls[0];
             if (styleStrEls.length > 1)
                 paletteName = styleStrEls[1];
         }

@@ -484,7 +484,7 @@ public class WmsUtils
                 vectorLayers.add(vec);
             }
         }
-
+        
         return vectorLayers;
     }
 

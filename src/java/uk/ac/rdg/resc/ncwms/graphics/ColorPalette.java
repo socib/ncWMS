@@ -142,7 +142,7 @@ public class ColorPalette
                     String paletteName = file.getName().substring(0, file.getName().lastIndexOf("."));
                     ColorPalette palette = new ColorPalette(paletteName, readColorPalette(new FileReader(file)));
                     logger.debug("Read palette with name {}", paletteName);
-                    palettes.put(palette.getName().trim().toLowerCase(), palette);
+                   palettes.put(palette.getName().trim().toLowerCase(), palette);
                 }
                 catch(Exception e)
                 {

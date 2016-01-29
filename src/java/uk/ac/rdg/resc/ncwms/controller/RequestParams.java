@@ -28,11 +28,11 @@
 
 package uk.ac.rdg.resc.ncwms.controller;
 
+import java.awt.Color;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.util.HashMap;
 import java.util.Map;
-import java.awt.Color;
 
 import uk.ac.rdg.resc.edal.util.Range;
 import uk.ac.rdg.resc.edal.util.Ranges;

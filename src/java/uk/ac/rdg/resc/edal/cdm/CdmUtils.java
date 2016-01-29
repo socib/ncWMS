@@ -48,6 +48,7 @@ import org.geotoolkit.referencing.crs.DefaultGeographicCRS;
 import org.joda.time.Chronology;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
+import org.joda.time.chrono.GregorianChronology;
 import org.joda.time.chrono.JulianChronology;
 import org.opengis.coverage.grid.GridCoordinates;
 import org.opengis.metadata.extent.GeographicBoundingBox;
@@ -71,6 +72,7 @@ import ucar.nc2.dt.GridDataset.Gridset;
 import ucar.nc2.dt.GridDatatype;
 import ucar.nc2.ft.FeatureDatasetFactoryManager;
 import ucar.nc2.time.CalendarDate;
+import ucar.nc2.time.ExposeDateTime;
 import ucar.unidata.geoloc.LatLonPoint;
 import ucar.unidata.geoloc.LatLonRect;
 import uk.ac.rdg.resc.edal.coverage.CoverageMetadata;
@@ -88,7 +90,6 @@ import uk.ac.rdg.resc.edal.geometry.HorizontalPosition;
 import uk.ac.rdg.resc.edal.time.AllLeapChronology;
 import uk.ac.rdg.resc.edal.time.NoLeapChronology;
 import uk.ac.rdg.resc.edal.time.ThreeSixtyDayChronology;
-import uk.ac.rdg.resc.edal.time.TimeUtils;
 import uk.ac.rdg.resc.edal.util.CollectionUtils;
 import uk.ac.rdg.resc.ncwms.graphics.ImageProducer;
 
@@ -100,19 +101,6 @@ import uk.ac.rdg.resc.ncwms.graphics.ImageProducer;
 public final class CdmUtils
 {
     private static final Logger logger = LoggerFactory.getLogger(CdmUtils.class);
-
-    /** Map of CF identifiers for calendar systems to joda-time Chronologies */
-    private static final Map<String, Chronology> CHRONOLOGIES = CollectionUtils.newHashMap();
-
-    static
-    {
-        CHRONOLOGIES.put("julian", JulianChronology.getInstanceUTC());
-        CHRONOLOGIES.put("360_day", ThreeSixtyDayChronology.getInstanceUTC());
-        CHRONOLOGIES.put("all_leap", AllLeapChronology.getInstanceUTC());
-        CHRONOLOGIES.put("366_day", AllLeapChronology.getInstanceUTC());
-        CHRONOLOGIES.put("noleap", NoLeapChronology.getInstanceUTC());
-        CHRONOLOGIES.put("365_day", NoLeapChronology.getInstanceUTC());
-    }
 
     /** Enforce non-instantiability */
     private CdmUtils() { throw new AssertionError(); }
@@ -378,7 +366,7 @@ public final class CdmUtils
      * system, in an appropriate {@link Chronology}. (Chronologies represent the
      * calendar system.)
      * 
-     * @param coordSys
+     * @param timeAxis
      *            The coordinate system containing the time information
      * @return List of TimestepInfo objects, or an empty list if the coordinate
      *         system has no time axis
@@ -387,58 +375,11 @@ public final class CdmUtils
      */
     public static List<DateTime> getTimesteps(CoordinateAxis1DTime timeAxis)
     {
-        Attribute cal = timeAxis.findAttribute("calendar");
-        String calString = cal == null ? null : cal.getStringValue().toLowerCase();
-        // TODO: check that we're using the right sort of Gregorian (proleptic or not)
-        if (calString == null || calString.equals("gregorian") || calString.equals("standard"))
-        {
-            List<DateTime> timesteps = new ArrayList<DateTime>();
-            // Use the Java NetCDF library's built-in date parsing code
-            //for (Date date : timeAxis.getTimeDates())
-            for (CalendarDate date : timeAxis.getCalendarDates()  )
-            {
-                timesteps.add(new DateTime(date.getMillis(), DateTimeZone.UTC));
-            }
-            return timesteps;
-        }
-        else
-        {
-            Chronology chron = CHRONOLOGIES.get(calString);
-            if (chron == null)
-            {
-                throw new IllegalArgumentException("The calendar system "
-                    + cal.getStringValue() + " cannot be handled");
-            }
-            return getTimestepsForChronology(timeAxis, chron);
-        }
-    }
-
-    /**
-     * Creates a list of DateTimes in a non-standard calendar system. All of the
-     * DateTimes will have a zero time zone offset (i.e. UTC).
-     */
-    private static List<DateTime> getTimestepsForChronology(CoordinateAxis1DTime timeAxis, Chronology chron)
-    {
-        // Get the units of the time axis, e.g. "days since 1970-1-1 0:0:0"
-        String timeAxisUnits = timeAxis.getUnitsString();
-        int indexOfSince = timeAxisUnits.indexOf(" since ");
-
-        // Get the units of the time axis, e.g. "days", "months"
-        String unitIncrement = timeAxisUnits.substring(0, indexOfSince);
-        // Get the number of milliseconds this represents
-        long unitLength = TimeUtils.getUnitLengthMillis(unitIncrement);
-
-        // Get the base date of the axis, e.g. "1970-1-1 0:0:0"
-        String baseDateTimeString = timeAxisUnits.substring(indexOfSince + " since ".length());
-        DateTime baseDateTime = TimeUtils.parseUdunitsTimeString(baseDateTimeString, chron);
-
-        // Now create and return the axis values
         List<DateTime> timesteps = new ArrayList<DateTime>();
-        for (double val : timeAxis.getCoordValues())
-        {
-            timesteps.add(baseDateTime.plus((long)(unitLength * val)));
-        }
-
+        // Use the Java NetCDF library's built-in date parsing code
+        //for (Date date : timeAxis.getTimeDates())
+        for (CalendarDate date : timeAxis.getCalendarDates()  )
+            timesteps.add(ExposeDateTime.getDateTime(date));
         return timesteps;
     }
 
@@ -615,11 +556,8 @@ public final class CdmUtils
     {
         // Create the mapping between the requested points in the target domain
         // and the nearest cells in the source grid
-        long start = System.nanoTime();
         PixelMap pixelMap = new PixelMap(sourceGrid, targetDomain);
-        long finish = System.nanoTime();
-        System.out.printf("Pixel map created in %f ms%n", (finish - start) / 1.e6);
-        
+
         if (pixelMap.isEmpty())
         {
             // There is no overlap between the source data grid and the target
