@@ -27,6 +27,7 @@
  */
 package uk.ac.rdg.resc.ncwms.controller;
 
+import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -145,6 +146,7 @@ public abstract class AbstractWmsController extends AbstractController {
         // directory containing the palettes.  Therefore we need a way of 
         // getting at the ServletContext object, which isn't available from
         // the ColorPalette class.
+        try {
         File paletteLocationDir = this.serverConfig.getPaletteFilesLocation(
             this.getServletContext());
         if (paletteLocationDir != null && paletteLocationDir.exists()
@@ -153,6 +155,9 @@ public abstract class AbstractWmsController extends AbstractController {
         } else {
             log.info("Directory of palette files does not exist or is not a directory");
         }
+        } catch (Exception e) {
+            log.error("Problem finding directory of colour palettes", e);
+    }
     }
 
     /**
@@ -340,7 +345,7 @@ public abstract class AbstractWmsController extends AbstractController {
             // stuff about polar stereographic projections
             "EPSG:3408", // NSIDC EASE-Grid North
             "EPSG:3409", // NSIDC EASE-Grid South
-            "EPSG:3857", // Google Maps
+            "EPSG:3857", "EPSG:900913", // Google Maps
             "EPSG:32661", // North Polar stereographic
             "EPSG:32761" // South Polar stereographic
         };
@@ -457,7 +462,8 @@ public abstract class AbstractWmsController extends AbstractController {
             else if (styleType.equalsIgnoreCase("fancyvec")) style = ImageProducer.Style.FANCYVEC;
             else if (styleType.equalsIgnoreCase("linevec")) style = ImageProducer.Style.LINEVEC;
             else if (styleType.equalsIgnoreCase("stumpvec")) style = ImageProducer.Style.STUMPVEC;
-            else if (styleType.equalsIgnoreCase("trivec")) style = ImageProducer.Style.TRIVEC;           
+            else if (styleType.equalsIgnoreCase("trivec")) style = ImageProducer.Style.TRIVEC;
+            else if (styleType.equalsIgnoreCase("prettyvec")) style = ImageProducer.Style.PRETTYVEC;
             else throw new StyleNotDefinedException("The style " + styles[0] +
                 " is not supported by this server");
 
@@ -485,6 +491,7 @@ public abstract class AbstractWmsController extends AbstractController {
             .opacity(styleRequest.getOpacity())
             .numColourBands(styleRequest.getNumColourBands())
             .numContours(styleRequest.getNumContours())
+            .vectorScale(styleRequest.getVectorScaleFactor())
             .build();
         // Need to make sure that the images will be compatible with the
         // requested image format
@@ -510,6 +517,7 @@ public abstract class AbstractWmsController extends AbstractController {
         long beforeExtractData = System.currentTimeMillis();
         // Use a single null time value if the layer has no time axis
         if (timeValues.isEmpty()) timeValues = Arrays.asList((DateTime)null);
+        boolean googleEarth = imageFormat instanceof KmzFormat;
         for (DateTime timeValue : timeValues) {
             // Only add a label if this is part of an animation
             String tValueStr = "";
@@ -547,7 +555,7 @@ public abstract class AbstractWmsController extends AbstractController {
         httpServletResponse.setStatus(HttpServletResponse.SC_OK);
         httpServletResponse.setContentType(mimeType);
         // If this is a KMZ file give it a sensible filename
-        if (imageFormat instanceof KmzFormat) {
+        if (googleEarth) {
             httpServletResponse.setHeader("Content-Disposition", "inline; filename=" +
                     layer.getDataset().getId() + "_" + layer.getId() + ".kmz");
         }
@@ -760,9 +768,13 @@ public abstract class AbstractWmsController extends AbstractController {
                     + "the scale extremes explicitly.");
             }
 
+            boolean transparent = params.getBoolean("transparent", false);
+            Color backgroundColor = params.getColor("bgcolor", Color.black);
+
             // Now create the legend image
-            legend = palette.createLegend(numColourBands, layer.getTitle(),
-                    layer.getUnits(), logarithmic, colorScaleRange);
+            legend = palette.createLegend(numColourBands, layer.getTitle(), layer.getUnits(),
+                                          logarithmic, colorScaleRange,
+                                          transparent, backgroundColor);
         }
         httpServletResponse.setContentType("image/png");
         ImageIO.write(legend, "png", httpServletResponse.getOutputStream());

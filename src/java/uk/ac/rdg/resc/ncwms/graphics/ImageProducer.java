@@ -78,7 +78,7 @@ public final class ImageProducer
     private static final Logger logger = LoggerFactory.getLogger(ImageProducer.class);
 
     //public static enum Style {BOXFILL, VECTOR, CONTOUR, BARB, ARROWS};
-    public static enum Style {BOXFILL, VECTOR, CONTOUR, BARB, STUMPVEC, TRIVEC, LINEVEC, FANCYVEC};
+    public static enum Style {BOXFILL, VECTOR, CONTOUR, BARB, STUMPVEC, TRIVEC, LINEVEC, FANCYVEC, PRETTYVEC};
     
     private Style style;
     // Width and height of the resulting picture
@@ -139,7 +139,8 @@ public final class ImageProducer
     public BufferedImage getLegend(Layer layer)
     {
         return this.colorPalette.createLegend(this.numColourBands, layer.getTitle(),
-            layer.getUnits(), this.logarithmic, this.scaleRange);
+            layer.getUnits(), this.logarithmic, this.scaleRange,
+            this.transparent, this.bgColor);
     }
     
     public int getPicWidth()
@@ -253,7 +254,7 @@ public final class ImageProducer
 
         if (style == Style.VECTOR || isArrowStyle(style) || style == Style.BARB) {
             Graphics2D g = image.createGraphics();
-            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
             g.setColor(new Color(0, 0, 0));
 
             float stepScale = 1.1f;
@@ -286,7 +287,8 @@ public final class ImageProducer
                         // Color arrow
                         index = this.getColourIndex(mag.floatValue());
                         if (this.style != Style.VECTOR) {
-                            g.setColor(new Color(colorModel.getRGB(index)));
+                            g.setColor(new Color(colorModel.getRGB(index),
+                                                 colorModel.hasAlpha()));
                         }
                         if (this.style == Style.BARB) {
                             g.setStroke(new BasicStroke(1));
@@ -354,18 +356,6 @@ public final class ImageProducer
         Graphics2D g = image.createGraphics();
         renderer.draw(g);
         
-//        int transpPixel = getColorModel().getRGB(0);
-//        System.out.println(transpPixel);
-//        for(int i=0; i<image.getWidth();i++) {
-//            for(int j=0; j<image.getHeight();j++) {
-//                int rgb = image.getRGB(i, j);
-//                System.out.println("rgb:"+rgb);
-//                if(rgb == transpPixel) {
-//                    image.setRGB(i, j, 0);
-//                }
-//            }            
-//        }
-//        
         return image;
     }
 
@@ -519,8 +509,7 @@ public final class ImageProducer
     }
     
     private boolean isArrowStyle(Style style){
-    	
-    	return style == Style.BARB || style == Style.FANCYVEC || style == Style.STUMPVEC || style == Style.TRIVEC || style == Style.LINEVEC;
+        return style == Style.BARB || style == Style.FANCYVEC || style == Style.STUMPVEC || style == Style.TRIVEC || style == Style.LINEVEC || style == Style.PRETTYVEC;
     }
 
     public int getOpacity()
