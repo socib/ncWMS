@@ -57,7 +57,7 @@ public class GetMapStyleRequest
     private int numContours;              // Number of contours to use in the image
     private float markerScale;            // Scale of the markers for vector plots.
     private float markerSpacing;          // Space of the markers for vector plots.
-    private boolean markerClipping;         // True if markers for vector plots should be clipped.
+    private boolean markerClipping;       // True if markers for vector plots should be clipped.
     private Boolean logarithmic;          // True if we're using a log scale, false if linear and null if not specified
     private Range<Float> colorScaleRange; // The limits of the color scale. 
     

@@ -430,7 +430,7 @@ public class MarkerPlot {
                                    int rows, int cols)
     {
         final int n = rows * cols - (rows > 1 ? rows - 2 : 0) * (cols > 1 ? cols - 2 : 0);
-        final Path2D.Float boundary = new Path2D.Float(Path2D.WIND_NON_ZERO, n);
+        final Path2D boundary = new Path2D.Float(Path2D.WIND_NON_ZERO, n);
         if (n > 0)
         {
             final float[] xy = new float[2 * n];
@@ -487,78 +487,84 @@ public class MarkerPlot {
             int rows, int cols, MarkerStyle style, float scale,
             Area coverage, Shape bounds, AffineTransform transform)
     {
+        boolean done;
+        int m, n;
+        int count;
         int k;
         float x, y, a, s;
-        Marker marker;
-        Shape outline;
         final AffineTransform axes = new AffineTransform();
         final Rectangle2D inset = new Rectangle2D.Float();
         final Area[] roverlap = new Area[rows];
         final Area[] coverlap = new Area[cols];
-        final int[] rfst = new int[rows]; Arrays.fill(rfst, cols);
-        final int[] rlst = new int[rows]; Arrays.fill(rlst, -1);
-        final int[] rcnt = new int[rows]; Arrays.fill(rcnt, 0);
-        final int[] cfst = new int[cols]; Arrays.fill(cfst, rows);
-        final int[] clst = new int[cols]; Arrays.fill(clst, -1);
-        final int[] ccnt = new int[cols]; Arrays.fill(ccnt, 0);
         final boolean[] mask = (dst == null) ? new boolean[rows*cols] : dst;
-        final boolean[] rask = new boolean[mask.length];
-        final boolean[] cask = new boolean[mask.length];
+        final boolean[] iask = new boolean[rows*cols];
+        final boolean[] oask = new boolean[rows*cols];
         for (int i = 0; i < rows; i++)
             roverlap[i] = new Area();
         for (int j = 0; j < cols; j++)
             coverlap[j] = new Area();
-        for (int i = 0, m = 0; m < rows; m++, i = rows - i - m % 2)
-            for (int j = 0, n = 0; n < cols; n++, j = cols - j - n % 2)
-            {
-                k = cols * i + j;
-                x = xpnts[k];
-                y = ypnts[k];
-                a = apnts[k];
-                s = spnts[k];
-                if (transform == null)
-                    axes.setToIdentity();
-                else
-                    axes.setTransform(transform);
-                axes.translate(x, y);
-                if (bounds != null) {
-                    inset.setRect(axes.createTransformedShape(bounds).getBounds2D());
-                } else if (coverage != null) {
-                    axes.scale(scale, scale);
-                    marker = style.marker(Float.isNaN(a) ? 0.0 : a ,
-                                          Float.isNaN(s) ? 1.0 : s);
-                    outline = marker.getOutline(axes);
-                    inset.setRect(outline.getBounds2D());
-                }
-                if (coverage == null || coverage.contains(inset)) {
-                    if (bounds == null || ! roverlap[i].intersects(inset)) {
-                        if (rfst[i] > j) rfst[i] = j;
-                        if (rlst[i] < j) rlst[i] = j;
-                        rcnt[i]++;
-                        roverlap[i].add(new Area(inset));
-                    }
-                    if (bounds == null || ! coverlap[j].intersects(inset)) {
-                        if (cfst[j] > i) cfst[j] = i;
-                        if (clst[j] < i) clst[j] = i;
-                        ccnt[j]++;
-                        coverlap[j].add(new Area(inset));
+        m = 1;
+        n = 1;
+        count = 0;
+        done = false;
+        for (int ll = 2, l0 = 1, l1 = 1;
+             ll <= rows + cols && ! done;
+             ll++, l0 = rows < ll ? ll - rows : 1, l1 = cols < ll ? cols : ll -  1) {
+            for (int l = l0; l <= l1 & ! done; l++) {
+                m = l;
+                n = ll - l;
+                count = 0;
+                done = true;
+                for (int i = 0; i < rows; i += m)
+                    roverlap[i].reset();
+                for (int j = 0; j < cols; j += n)
+                    coverlap[j].reset();
+                for (int i = 0; i < rows && done; i += m) {
+                    for (int j = 0; j < cols && done; j += n) {
+                        k = cols * i + j;
+                        x = xpnts[k];
+                        y = ypnts[k];
+                        a = apnts[k];
+                        s = spnts[k];
+                        if (! oask[k]) {
+                            if (transform == null)
+                                axes.setToIdentity();
+                            else
+                                axes.setTransform(transform);
+                            axes.translate(x, y);
+                            if (bounds != null) {
+                                inset.setRect(axes.createTransformedShape(bounds).getBounds2D());
+                            } else if (coverage != null) {
+                                axes.scale(scale, scale);
+                                if (Float.isNaN(a) || Float.isNaN(s))
+                                    inset.setRect(0, 0, 0, 0);
+                                else
+                                    inset.setRect(style.marker(a, s).getOutline(axes).getBounds2D());
+                            }
+                            if (iask[k] || coverage == null || coverage.contains(inset)) {
+                                iask[k] = true;
+                                if (bounds != null) {
+                                    for (int ii = i; ii >= 0 && done; ii -= m)
+                                        done = ! roverlap[ii].intersects(inset);
+                                    for (int jj = j; jj >= 0 && done; jj -= n)
+                                        done = ! coverlap[jj].intersects(inset);
+                                    if (done) {
+                                        roverlap[i].add(new Area(inset));
+                                        coverlap[j].add(new Area(inset));
+                                        count++;
+                                    }
+                                }
+                            } else {
+                                oask[k] = true;
+                            }
+                        }
                     }
                 }
             }
-        Arrays.fill(rask, false);
+        }
         for (int i = 0; i < rows; i++)
-            for (int o = rfst[i], l = (rlst[i] - rfst[i]), m = 0, n = rcnt[i], j = o;
-                 m < n;
-                 m++, j = (int)((float) o + (float) l / (float) (n - 1) * (float) m))
-                rask[cols * i + j] = true;
-        Arrays.fill(cask, false);
-        for (int j = 0; j < cols; j++)
-            for (int o = cfst[j], l = (clst[j] - cfst[j]), m = 0, n = ccnt[j], i = o;
-                 m < n;
-                 m++, i = (int)((float) o + (float) l / (float) (n - 1) * (float) m ))
-                cask[cols * i + j] = true;
-        for (int m = 0; m < mask.length; m++)
-            mask[m] = rask[m] & cask[m];
+            for (int j = 0; j < cols; j++)
+                mask[cols * i + j] = iask[cols * i + j] & (i % m == 0) & (j % n == 0);
         return mask;
     }
 
