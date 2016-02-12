@@ -38,13 +38,10 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
 
 import javax.imageio.ImageIO;
 import javax.servlet.http.HttpServletRequest;
@@ -64,15 +61,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.web.servlet.ModelAndView;
 import org.springframework.web.servlet.mvc.AbstractController;
 
-import uk.ac.rdg.resc.edal.cdm.PixelMap;
-import uk.ac.rdg.resc.edal.cdm.PixelMap.PixelMapEntry;
 import uk.ac.rdg.resc.edal.coverage.domain.Domain;
 import uk.ac.rdg.resc.edal.coverage.domain.impl.HorizontalDomain;
 import uk.ac.rdg.resc.edal.coverage.grid.GridCoordinates;
 import uk.ac.rdg.resc.edal.coverage.grid.HorizontalGrid;
-import uk.ac.rdg.resc.edal.coverage.grid.RectilinearGrid;
-import uk.ac.rdg.resc.edal.coverage.grid.ReferenceableAxis;
 import uk.ac.rdg.resc.edal.coverage.grid.RegularGrid;
+import uk.ac.rdg.resc.edal.coverage.grid.impl.MapGridImpl;
 import uk.ac.rdg.resc.edal.geometry.HorizontalPosition;
 import uk.ac.rdg.resc.edal.geometry.LonLatPosition;
 import uk.ac.rdg.resc.edal.geometry.impl.HorizontalPositionImpl;
@@ -85,13 +79,12 @@ import uk.ac.rdg.resc.ncwms.exceptions.InvalidDimensionValueException;
 import uk.ac.rdg.resc.ncwms.exceptions.InvalidFormatException;
 import uk.ac.rdg.resc.ncwms.exceptions.InvalidUpdateSequence;
 import uk.ac.rdg.resc.ncwms.exceptions.LayerNotDefinedException;
-import uk.ac.rdg.resc.ncwms.exceptions.StyleNotDefinedException;
 import uk.ac.rdg.resc.ncwms.exceptions.Wms1_1_1Exception;
 import uk.ac.rdg.resc.ncwms.exceptions.WmsException;
-import uk.ac.rdg.resc.ncwms.graphics.BilinearInterpolator;
 import uk.ac.rdg.resc.ncwms.graphics.ColorPalette;
 import uk.ac.rdg.resc.ncwms.graphics.ImageFormat;
 import uk.ac.rdg.resc.ncwms.graphics.ImageProducer;
+import uk.ac.rdg.resc.ncwms.graphics.ImageStyle;
 import uk.ac.rdg.resc.ncwms.graphics.KmzFormat;
 import uk.ac.rdg.resc.ncwms.usagelog.UsageLogEntry;
 import uk.ac.rdg.resc.ncwms.usagelog.UsageLogger;
@@ -349,13 +342,21 @@ public abstract class AbstractWmsController extends AbstractController {
             "EPSG:32661", // North Polar stereographic
             "EPSG:32761" // South Polar stereographic
         };
+        // Compute the available styles for scalar and vector layers:
+        Set<String> vectorStyleNames = new HashSet<String>(ImageStyle.getAvailableStyleNames());
+        Set<String> scalarStyleNames = new HashSet<String>();
+        for (String styleName : vectorStyleNames)
+            if (! ImageStyle.get(styleName).isMarker())
+                scalarStyleNames.add(styleName);
         models.put("supportedCrsCodes", supportedCrsCodes); //*/HorizontalGrid.SUPPORTED_CRS_CODES);
         models.put("supportedImageFormats", ImageFormat.getSupportedMimeTypes());
         models.put("layerLimit", LAYER_LIMIT);
         models.put("featureInfoFormats", new String[]{FEATURE_INFO_PNG_FORMAT,
-                    FEATURE_INFO_XML_FORMAT});
-        models.put("legendWidth", ColorPalette.LEGEND_WIDTH);
-        models.put("legendHeight", ColorPalette.LEGEND_HEIGHT);
+                                                      FEATURE_INFO_XML_FORMAT});
+        models.put("legendWidth", ImageProducer.LEGEND_WIDTH);
+        models.put("legendHeight", ImageProducer.LEGEND_HEIGHT);
+        models.put("scalarStyleNames", scalarStyleNames);
+        models.put("vectorStyleNames", vectorStyleNames);
         models.put("paletteNames", ColorPalette.getAvailablePaletteNames());
         models.put("verboseTimes", verboseTimes);
 
@@ -412,103 +413,81 @@ public abstract class AbstractWmsController extends AbstractController {
         usageLogEntry.setGetMapRequest(getMapRequest);
 
         GetMapStyleRequest styleRequest = getMapRequest.getStyleRequest();
+        GetMapDataRequest dataRequest = getMapRequest.getDataRequest();
 
         // Get the ImageFormat object corresponding with the requested MIME type
         String mimeType = styleRequest.getImageFormat();
         // This throws an InvalidFormatException if the MIME type is not supported
         ImageFormat imageFormat = ImageFormat.get(mimeType);
 
-        GetMapDataRequest dr = getMapRequest.getDataRequest();
+        // Ensure that the images will be compatible with the requested image format.s
+        if (styleRequest.isTransparent() && !imageFormat.supportsFullyTransparentPixels())
+            throw new WmsException("The image format " + mimeType +
+                                   " does not support fully-transparent pixels");
+        if (styleRequest.getOpacity() < 100 && !imageFormat.supportsPartiallyTransparentPixels())
+            throw new WmsException("The image format " + mimeType +
+                                   " does not support partially-transparent pixels");
 
         // Check the dimensions of the image
-        if (dr.getHeight() > this.serverConfig.getMaxImageHeight() ||
-            dr.getWidth()  > this.serverConfig.getMaxImageWidth()) {
+        if (dataRequest.getHeight() > this.serverConfig.getMaxImageHeight() ||
+            dataRequest.getWidth()  > this.serverConfig.getMaxImageWidth()) {
             throw new WmsException("Requested image size exceeds the maximum of "
                 + this.serverConfig.getMaxImageWidth() + "x"
                 + this.serverConfig.getMaxImageHeight());
         }
 
-        String layerName = getLayerName(dr);
-        Layer layer = layerFactory.getLayer(layerName);
+        String layerName = getLayerName(dataRequest);
+        final Layer layer = layerFactory.getLayer(layerName);
         usageLogEntry.setLayer(layer);
 
         // Get the grid onto which the data will be projected
-        RegularGrid grid = WmsUtils.getImageGrid(dr);
+        RegularGrid imageGrid = WmsUtils.getImageGrid(dataRequest);
+        HorizontalGrid layerGrid = layer.getHorizontalGrid();
+        MapGridImpl mapGrid = new MapGridImpl(layerGrid, imageGrid);
 
         // Create an object that will turn data into BufferedImages
         Range<Float> scaleRange = styleRequest.getColorScaleRange();
-        if (scaleRange == null) scaleRange = layer.getApproxValueRange();
+        if (scaleRange == null)
+            scaleRange = layer.getApproxValueRange();
         Boolean logScale = styleRequest.isScaleLogarithmic();
-        if (logScale == null) logScale = layer.isLogScaling();
-        ImageProducer.Style style = layer instanceof VectorLayer
-                ? ImageProducer.Style.VECTOR
-                : ImageProducer.Style.BOXFILL;
-        ColorPalette palette = layer.getDefaultColorPalette();
+        if (logScale == null)
+            logScale = layer.isLogScaling();
         String[] styles = styleRequest.getStyles();
-        boolean smoothed = false;
-        if (styles.length > 0) {
+        String styleName = null;
+        String paletteName = null;
+        if (styles.length > 0)
+        {
             String[] styleStrEls = styles[0].split("/");
-
-            // Get the style type
-            String styleType = styleStrEls[0];
-            if (styleType.equalsIgnoreCase("boxfill")) style = ImageProducer.Style.BOXFILL;
-            else if (styleType.equalsIgnoreCase("vector")) style = ImageProducer.Style.VECTOR;
-            //else if (styleType.equalsIgnoreCase("arrows")) style = ImageProducer.Style.ARROWS;
-            else if (styleType.equalsIgnoreCase("barb")) style = ImageProducer.Style.BARB;
-            else if (styleType.equalsIgnoreCase("contour")){ 
-            	style = ImageProducer.Style.CONTOUR;
-            	smoothed = true;
-            }
-            else if (styleType.equalsIgnoreCase("fancyvec")) style = ImageProducer.Style.FANCYVEC;
-            else if (styleType.equalsIgnoreCase("linevec")) style = ImageProducer.Style.LINEVEC;
-            else if (styleType.equalsIgnoreCase("stumpvec")) style = ImageProducer.Style.STUMPVEC;
-            else if (styleType.equalsIgnoreCase("trivec")) style = ImageProducer.Style.TRIVEC;
-            else if (styleType.equalsIgnoreCase("prettyvec")) style = ImageProducer.Style.PRETTYVEC;
-            else throw new StyleNotDefinedException("The style " + styles[0] +
-                " is not supported by this server");
-
-            // Now get the colour palette
-            String paletteName = null;
-            if (styleStrEls.length > 1) paletteName = styleStrEls[1];
-            palette = ColorPalette.get(paletteName);
-            if (palette == null) {
-                throw new StyleNotDefinedException("There is no palette with the name "
-                    + paletteName);
-            }
+           styleName = styleStrEls[0];
+            if (styleStrEls.length > 1)
+                paletteName = styleStrEls[1];
         }
-
+        ImageStyle style = ImageStyle.get(styleName);
+        ColorPalette palette = ColorPalette.get(paletteName);
         ImageProducer imageProducer = new ImageProducer.Builder()
-            .width(dr.getWidth())
-            .height(dr.getHeight())
+            .layerGrid(mapGrid)
+            .imageGrid(imageGrid)
             .style(style)
             .palette(palette)
-            .colourScaleRange(scaleRange)
-            .backgroundColour(styleRequest.getBackgroundColour())
-            .lowOutOfRangeColour(styleRequest.getLowOutOfRangeColour())
-            .highOutOfRangeColour(styleRequest.getHighOutOfRangeColour())
+            .colorScaleRange(scaleRange)
+            .backgroundColor(styleRequest.getBackgroundColor())
+            .belowMinColor(styleRequest.getBelowMinColor())
+            .aboveMaxColor(styleRequest.getAboveMaxColor())
             .transparent(styleRequest.isTransparent())
             .logarithmic(logScale)
             .opacity(styleRequest.getOpacity())
-            .numColourBands(styleRequest.getNumColourBands())
+            .numColorBands(styleRequest.getNumColorBands())
             .numContours(styleRequest.getNumContours())
-            .vectorScale(styleRequest.getVectorScaleFactor())
+            .markerScale(styleRequest.getMarkerScale())
+            .markerSpacing(styleRequest.getMarkerSpacing())
+            .markerClipping(styleRequest.getMarkerClipping())
             .build();
-        // Need to make sure that the images will be compatible with the
-        // requested image format
-        if (imageProducer.isTransparent() && !imageFormat.supportsFullyTransparentPixels()) {
-            throw new WmsException("The image format " + mimeType +
-                    " does not support fully-transparent pixels");
-        }
-        if (imageProducer.getOpacity() < 100 && !imageFormat.supportsPartiallyTransparentPixels()) {
-            throw new WmsException("The image format " + mimeType +
-                    " does not support partially-transparent pixels");
-        }
 
-        double zValue = getElevationValue(dr.getElevationString(), layer);
+        double zValue = getElevationValue(dataRequest.getElevationString(), layer);
 
         // Cycle through all the provided timesteps, extracting data for each step
         List<String> tValueStrings = new ArrayList<String>();
-        List<DateTime> timeValues = getTimeValues(dr.getTimeString(), layer);
+        List<DateTime> timeValues = getTimeValues(dataRequest.getTimeString(), layer);
         if (timeValues.size() > 1 && !imageFormat.supportsMultipleFrames()) {
             throw new WmsException("The image format " + mimeType +
                     " does not support multiple frames");
@@ -517,7 +496,6 @@ public abstract class AbstractWmsController extends AbstractController {
         long beforeExtractData = System.currentTimeMillis();
         // Use a single null time value if the layer has no time axis
         if (timeValues.isEmpty()) timeValues = Arrays.asList((DateTime)null);
-        boolean googleEarth = imageFormat instanceof KmzFormat;
         for (DateTime timeValue : timeValues) {
             // Only add a label if this is part of an animation
             String tValueStr = "";
@@ -525,20 +503,15 @@ public abstract class AbstractWmsController extends AbstractController {
                 tValueStr = WmsUtils.dateTimeToISO8601(timeValue);
             }
             tValueStrings.add(tValueStr);
-
             if (layer instanceof ScalarLayer) {
                 // Note that if the layer doesn't have a time axis, timeValue==null but this
                 // will be ignored by readHorizontalPoints()
-                List<Float> data = this.readDataGrid((ScalarLayer)layer, timeValue, zValue, grid, usageLogEntry, smoothed);
+                ScalarLayer scalarLayer = (ScalarLayer) layer;
+                List<Float> data = scalarLayer.readHorizontalPoints(timeValue, zValue, mapGrid);
                 imageProducer.addFrame(data, tValueStr);
             } else if (layer instanceof VectorLayer) {
-                VectorLayer vecLayer = (VectorLayer)layer;
-                
-                List<Float>[] xyVals = vecLayer.readXYComponents(timeValue, zValue, grid);
-                
-                /*
-                 * Now add the image frame
-                 */
+                VectorLayer vectorLayer = (VectorLayer)layer;
+                List<Float>[] xyVals = vectorLayer.readXYComponents(timeValue, zValue, mapGrid);
                 imageProducer.addFrame(xyVals[0], xyVals[1], tValueStr);
             } else {
                 throw new IllegalStateException("Unrecognized layer type");
@@ -555,14 +528,14 @@ public abstract class AbstractWmsController extends AbstractController {
         httpServletResponse.setStatus(HttpServletResponse.SC_OK);
         httpServletResponse.setContentType(mimeType);
         // If this is a KMZ file give it a sensible filename
-        if (googleEarth) {
+        if (imageFormat instanceof KmzFormat) {
             httpServletResponse.setHeader("Content-Disposition", "inline; filename=" +
                     layer.getDataset().getId() + "_" + layer.getId() + ".kmz");
         }
         // Render the images and write to the output stream
         imageFormat.writeImage(imageProducer.getRenderedFrames(),
                 httpServletResponse.getOutputStream(), layer, tValueStrings,
-                dr.getElevationString(), grid.getExtent(), legend);
+                dataRequest.getElevationString(), imageGrid.getExtent(), legend);
 
         return null;
     }
@@ -723,62 +696,69 @@ public abstract class AbstractWmsController extends AbstractController {
      */
     protected ModelAndView getLegendGraphic(RequestParams params,
             LayerFactory layerFactory, HttpServletResponse httpServletResponse)
-            throws Exception {
+            throws Exception
+    {
         BufferedImage legend;
-
-        // numColourBands defaults to ColorPalette.MAX_NUM_COLOURS if not set
-        int numColourBands = GetMapStyleRequest.getNumColourBands(params);
-
+        boolean colorBarOnly = params.getBoolean("colorbaronly", false);
         String paletteName = params.getString("palette");
-
-        // Find out if we just want the colour bar with no supporting text
-        String colorBarOnly = params.getString("colorbaronly", "false");
-        if (colorBarOnly.equalsIgnoreCase("true")) {
+        int numColorBands =  GetMapStyleRequest.getNumColorBands(params);
+        Color backgroundColor = GetMapStyleRequest.getBackgroundColor(params);
+        Color belowMinColor = GetMapStyleRequest.getBelowMinColor(params);
+        Color aboveMaxColor = GetMapStyleRequest.getAboveMaxColor(params);
+        boolean transparent = GetMapStyleRequest.isTransparent(params);
+        int opacity = GetMapStyleRequest.getOpacity(params);
+        if (colorBarOnly)
+        {
             // We're only creating the colour bar so we need to know a width
             // and height
             int width = params.getPositiveInt("width", 50);
             int height = params.getPositiveInt("height", 200);
-            // Find the requested colour palette, or use the default if not set
             ColorPalette palette = ColorPalette.get(paletteName);
-            legend = palette.createColorBar(width, height, numColourBands);
-        } else {
+            ImageProducer imageProducer = new ImageProducer.Builder()
+                .palette(palette)
+                .numColorBands(numColorBands)
+                .backgroundColor(backgroundColor)
+                .belowMinColor(belowMinColor)
+                .aboveMaxColor(aboveMaxColor)
+                .transparent(transparent)
+                .opacity(opacity)
+                .build();
+            legend = imageProducer.getColorBar(width, height);
+        }
+        else
+        {
             // We're creating a legend with supporting text so we need to know
             // the colour scale range and the layer in question
             String layerName = params.getMandatoryString("layer");
             Layer layer = layerFactory.getLayer(layerName);
-
-            // We default to the layer's default palette if none is specified
-            ColorPalette palette = paletteName == null
-                ? layer.getDefaultColorPalette()
-                : ColorPalette.get(paletteName);
-
-            // See if the client has specified a logarithmic scaling, defaulting
-            // to the layer's default
+            ColorPalette palette = (paletteName == null)
+                                 ? layer.getDefaultColorPalette()
+                                 : ColorPalette.get(paletteName);
             Boolean isLogScale = GetMapStyleRequest.isLogScale(params);
-            boolean logarithmic = isLogScale == null ? layer.isLogScaling() : isLogScale.booleanValue();
-
-            // Now get the colour scale range
+            if (isLogScale == null)
+                isLogScale = layer.isLogScaling();
             Range<Float> colorScaleRange = GetMapStyleRequest.getColorScaleRange(params);
-            if (colorScaleRange == null) {
-                // Use the layer's default range if none is specified
+            if (colorScaleRange == null)
                 colorScaleRange = layer.getApproxValueRange();
-            } else if (colorScaleRange.isEmpty()) {
-                throw new WmsException("Cannot automatically create a colour scale "
-                    + "for a legend graphic.  Use COLORSCALERANGE=default or specify "
-                    + "the scale extremes explicitly.");
-            }
-
-            boolean transparent = params.getBoolean("transparent", false);
-            Color backgroundColor = params.getColor("bgcolor", Color.black);
-
-            // Now create the legend image
-            legend = palette.createLegend(numColourBands, layer.getTitle(), layer.getUnits(),
-                                          logarithmic, colorScaleRange,
-                                          transparent, backgroundColor);
+            if (colorScaleRange.isEmpty())
+                throw new WmsException("Cannot automatically create a colour scale" + 
+                                       " for a legend graphic. Use COLORSCALERANGE=default" +
+                                       " or specify the scale extremes explicitly.");
+            ImageProducer imageProducer = new ImageProducer.Builder()
+                .palette(palette)
+                .numColorBands(numColorBands)
+                .backgroundColor(backgroundColor)
+                .belowMinColor(belowMinColor)
+                .aboveMaxColor(aboveMaxColor)
+                .transparent(transparent)
+                .opacity(opacity)
+                .colorScaleRange(colorScaleRange)
+                .logarithmic(isLogScale)
+                .build();
+            legend = imageProducer.getLegend(layer);
         }
         httpServletResponse.setContentType("image/png");
         ImageIO.write(legend, "png", httpServletResponse.getOutputStream());
-
         return null;
     }
 
@@ -1007,7 +987,7 @@ public abstract class AbstractWmsController extends AbstractController {
             throws WmsException, InvalidDimensionValueException, IOException
     {
         // Look for styling parameters in the URL
-        int numColourBands = GetMapStyleRequest.getNumColourBands(params);
+        int numColourBands = GetMapStyleRequest.getNumColorBands(params);
         Range<Float> scaleRange = GetMapStyleRequest.getColorScaleRange(params);
         if (scaleRange == null) scaleRange = layer.getApproxValueRange();
         // TODO: deal with auto scale ranges - look at actual values extracted
@@ -1350,146 +1330,6 @@ public abstract class AbstractWmsController extends AbstractController {
             tValues.add(layerTValues.get(i));
         }
         return tValues;
-    }
-
-    /**
-     * Reads a grid of data from the given layer, used by the GetMap operation.
-     * <p>This implementation simply defers to {@link
-     * ScalarLayer#readPointList(org.joda.time.DateTime, double,
-     * uk.ac.rdg.resc.ncwms.datareader.PointList) layer.readPointList()},
-     * ignoring the usage log entry.  No data are cached.  Other implementations
-     * may choose to implement in a different way, perhaps to allow for caching
-     * of the data.  If implementations return cached data they must indicate
-     * this by setting {@link UsageLogEntry#setUsedCache(boolean)}.</p>
-     * @param layer The layer containing the data
-     * @param time The time instant for which we require data.  If this does not
-     * match a time instant in {@link Layer#getTimeValues()} an {@link InvalidDimensionValueException}
-     * will be thrown.  (If this Layer has no time axis, this parameter will be ignored.)
-     * @param elevation The elevation for which we require data (in the
-     * {@link Layer#getElevationUnits() units of this Layer's elevation axis}).  If
-     * this does not match a valid {@link Layer#getElevationValues() elevation value}
-     * in this Layer, this method will throw an {@link InvalidDimensionValueException}.
-     * (If this Layer has no elevation axis, this parameter will be ignored.)
-     * @param imageGrid The grid of points, one point per pixel in the image that will
-     * be created in the GetMap operation
-     * @param usageLogEntry
-     * @return a List of data values, one for each point in
-     * the {@code grid}, in the same order.
-     * @throws InvalidDimensionValueException if {@code dateTime} or {@code elevation}
-     * do not represent valid values along the time and elevation axes.
-     * @throws IOException if there was an error reading from the data source
-     */
-    protected List<Float> readDataGrid(ScalarLayer layer, DateTime dateTime,
-        double elevation, RegularGrid imageGrid, UsageLogEntry usageLogEntry, boolean smoothed)
-        throws InvalidDimensionValueException, IOException
-    {
-        if(!smoothed) {
-            return layer.readHorizontalPoints(dateTime, elevation, imageGrid);
-        } else {
-            int width = imageGrid.getXAxis().getSize();
-            int height = imageGrid.getYAxis().getSize();
-            
-            RectilinearGrid dataGrid;
-            if(!(layer.getHorizontalGrid() instanceof RectilinearGrid)) {
-                return layer.readHorizontalPoints(dateTime, elevation, imageGrid);
-            } else {
-                dataGrid = (RectilinearGrid) layer.getHorizontalGrid();
-            }
-            PixelMap pixelMap = new PixelMap(dataGrid, imageGrid);
-            /*
-             * Check whether it is worth smoothing this data
-             */
-            int imageSize = width * height;
-            if(pixelMap.getNumUniqueIJPairs() >= imageSize || pixelMap.getNumUniqueIJPairs() == 0) {
-                /*
-                 * We don't need to smooth the data
-                 */
-                return layer.readHorizontalPoints(dateTime, elevation, imageGrid);
-            }
-            
-            ReferenceableAxis xAxis = dataGrid.getXAxis();
-            ReferenceableAxis yAxis = dataGrid.getYAxis();
-            SortedSet<Double> xCoords = new TreeSet<Double>();
-            SortedSet<Double> yCoords = new TreeSet<Double>();
-            double minX = imageGrid.getXAxis().getCoordinateValue(0);
-           
-            /*
-             * Loop through all points on the data grid which are needed, and add
-             * them to sorted sets
-             */
-            Iterator<PixelMapEntry> iterator = pixelMap.iterator();
-            while(iterator.hasNext()) {
-                PixelMapEntry pme = iterator.next();
-                xCoords.add(Utils.getNextEquivalentLongitude(minX,
-                        xAxis.getCoordinateValue(pme.getSourceGridIIndex())));
-                yCoords.add(yAxis.getCoordinateValue(pme.getSourceGridJIndex()));
-            }
-            Float[][] data = new Float[xCoords.size()][yCoords.size()];
-            final CoordinateReferenceSystem crs = layer.getHorizontalGrid().getCoordinateReferenceSystem();
-            final List<HorizontalPosition> pointsToRead = new ArrayList<HorizontalPosition>();
-            
-            /*
-             * Loop through required coords and add to a list to read
-             */
-            for(Double x : xCoords) {
-                for(Double y : yCoords) {
-                    pointsToRead.add(new HorizontalPositionImpl(x, y, crs));
-                }               
-            }
-            /*
-             * Use the list to read all required points at once
-             */
-            List<Float> points;
-            try {
-                points = layer.readHorizontalPoints(dateTime, elevation, new Domain<HorizontalPosition>() {
-                    @Override
-                    public CoordinateReferenceSystem getCoordinateReferenceSystem() {
-                        return crs;
-                    }
-                    @Override
-                    public List<HorizontalPosition> getDomainObjects() {
-                        return pointsToRead;
-                    }
-                    @Override
-                    public long size() {
-                        return pointsToRead.size();
-                    }
-                });
-            } catch (InvalidDimensionValueException e) {
-                e.printStackTrace();
-                throw new IllegalArgumentException("Problem reading data");
-            } catch (IOException e) {
-                e.printStackTrace();
-                throw new IllegalArgumentException("Problem reading data");
-            }
-            /*
-             * Now populate the data array
-             */
-            int index = 0;
-            for (int i = 0; i < xCoords.size(); i++) {
-                for (int j = 0; j < yCoords.size(); j++) {
-                    data[i][j] = points.get(index++);
-                }
-            }
-           
-            /*
-             * All data reading is done at this point. We now interpolate onto each
-             * image point, using a BilinearInterpolator
-             */
-            BilinearInterpolator interpolator = new BilinearInterpolator(xCoords, yCoords, data);
-               
-            List<Float> retData = new ArrayList<Float>();
-           
-            for (int j = 0; j < height; j++) {
-                double y = imageGrid.getYAxis().getCoordinateValue(j);
-                for (int i = 0; i < width; i++) {
-                    double x = imageGrid.getXAxis().getCoordinateValue(i);
-                    retData.add(interpolator.getValue(x, y));
-//                            retData[i][height - 1 - j] = interpolator.getValue(x,y);
-                }
-            }
-            return retData;
-        }
     }
 
     /**

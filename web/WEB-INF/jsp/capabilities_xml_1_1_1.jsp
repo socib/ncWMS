@@ -16,8 +16,10 @@ response.setDateHeader ("Expires", 0); //prevents caching at the proxy server
          layerLimit = Maximum number of layers that can be requested simultaneously from this server (int)
          featureInfoFormats = Array of Strings representing MIME types of supported feature info formats
          legendWidth, legendHeight = size of the legend that will be returned from GetLegendGraphic
+         scalarStyleNames = Names of styles for scalar layers supported by this server (Set<String>)
+         vectorStyleNames = Names of styles for vector layers supported by this server (Set<String>)
          paletteNames = Names of colour palettes that are supported by this server (Set<String>)
-         verboseTime = boolean flag to indicate whether we should use a verbose or concise version of the TIME value string
+         verboseTimes = boolean flag to indicate whether we should use a verbose or concise version of the TIME value string
      --%>
 <!DOCTYPE WMT_MS_Capabilities SYSTEM "http://schemas.opengis.net/wms/1.1.1/capabilities_1_1_1.dtd">
 <WMT_MS_Capabilities
@@ -141,9 +143,9 @@ response.setDateHeader ("Expires", 0); //prevents caching at the proxy server
                         </c:choose>
                     </Extent>
                     </c:if>
-                    <c:set var="styles" value="boxfill"/>
+                    <c:set var="styles" value="${scalarStyleNames}"/>
                     <c:if test="${utils:isVectorLayer(layer)}">
-                        <c:set var="styles" value="vector,arrows,barb,boxfill"/>
+                        <c:set var="styles" value="${vectorStyleNames}"/>
                     </c:if>
                     <c:forEach var="style" items="${styles}">
                     <c:forEach var="paletteName" items="${paletteNames}">
@@ -158,11 +160,6 @@ response.setDateHeader ("Expires", 0); //prevents caching at the proxy server
                     </Style>
                     </c:forEach>
                     </c:forEach>
-                    <Style>
-                        <Name>contour/</Name>
-                        <Title>contour/</Title>
-                        <Abstract>Contour style</Abstract>
-                    </Style>
                 </Layer>
                 </c:if>
                 </c:forEach> <%-- End loop through variables --%>

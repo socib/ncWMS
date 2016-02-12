@@ -29,26 +29,18 @@
 package uk.ac.rdg.resc.ncwms.graphics;
 
 import java.awt.Color;
-import java.awt.Graphics2D;
-import java.awt.geom.AffineTransform;
-import java.awt.image.BufferedImage;
-import java.awt.image.IndexColorModel;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.Reader;
-import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import uk.ac.rdg.resc.edal.util.Range;
 
 /**
  * A palette of colours that is used by an {@link ImageProducer} to render 
@@ -59,13 +51,6 @@ public class ColorPalette
 {
     private static final Logger logger = LoggerFactory.getLogger(ColorPalette.class);
     
-    /**
-     * The maximum number of colours a palette can support (250).
-     * (One would be hard pushed to distinguish more colours than this in a
-     * typical scenario anyway.)
-     */
-    public static final int MAX_NUM_COLOURS = 250;
-
     private static final Map<String, ColorPalette> palettes =
         new HashMap<String, ColorPalette>();
     
@@ -75,15 +60,6 @@ public class ColorPalette
      * @see DEFAULT_PALETTE
      */
     public static final String DEFAULT_PALETTE_NAME = "rainbow";
-    
-    /**
-     * The width of the legend in pixels that will be created by createLegend()
-     */
-    public static final int LEGEND_WIDTH = 110;
-    /**
-     * The height of the legend in pixels that will be created by createLegend()
-     */
-    public static final int LEGEND_HEIGHT = 264;
     
     /**
      * This is the palette that will be used if no specific palette has been
@@ -166,7 +142,7 @@ public class ColorPalette
                     String paletteName = file.getName().substring(0, file.getName().lastIndexOf("."));
                     ColorPalette palette = new ColorPalette(paletteName, readColorPalette(new FileReader(file)));
                     logger.debug("Read palette with name {}", paletteName);
-                    palettes.put(palette.getName().toLowerCase(), palette);
+                   palettes.put(palette.getName().trim().toLowerCase(), palette);
                 }
                 catch(Exception e)
                 {
@@ -184,309 +160,30 @@ public class ColorPalette
      * the given name.  If name is null or the empty string this will return
      * the default palette.
      */
-    public static ColorPalette get(String name)
+    public static ColorPalette get(String name) throws IllegalArgumentException
     {
+        ColorPalette palette;
         if (name == null || name.trim().equals(""))
-        {
-        	return palettes.get(DEFAULT_PALETTE_NAME);
-        }
-        ColorPalette ret = palettes.get(name.trim().toLowerCase());
-        if(ret != null) {
-        	return ret;
-        } else {
-        	return palettes.get(DEFAULT_PALETTE_NAME);
-        }
+            palette = palettes.get(DEFAULT_PALETTE_NAME);
+        else
+            palette = palettes.get(name.trim().toLowerCase());
+        if(palette == null)
+            throw new IllegalArgumentException("unknown palette " + name);
+        return palette;
     }
 
     /** Gets the name of this palette */
     public String getName() { return this.name; }
     
-    /**
-     * Creates a color bar with the given width and height and the given number
-     * of color bands.  The color bar will consist of horizontal stripes of color,
-     * with the first color at the bottom. Clients that wish to display the bar
-     * horizontally should rotate the image clockwise through ninety degrees.
-     * @param width The width of the requested color bar in pixels
-     * @param height The height of the requested color bar in pixels
-     * @param numColorBands The number of bands of color to include in the bar
-     * @return a new BufferedImage
+    /** Gets the sequence of colors of the palette in an array.
+     * @return array of colors of the palette.
      */
-    public BufferedImage createColorBar(int width, int height, int numColorBands)
-    {
-        double colorBandWidth = (double)height / numColorBands;
-        // Get an interpolated/subsampled palette for the color bar
-        Color[] newPalette = this.getPalette(numColorBands);
-        // Create a BufferedImage of the correct size - we don't need the alpha channel
-        BufferedImage colorBar = new BufferedImage(width, height,
-            BufferedImage.TYPE_INT_ARGB);
-        Graphics2D gfx = colorBar.createGraphics();
-        // Cycle through each row in the image and draw a band of the
-        // appropriate colour.
-        for (int i = 0; i < height; i++)
-        {
-            int colorIndex = (int)(i / colorBandWidth);
-            // The colours at the end of the palette need to be at the top
-            // of the image
-            gfx.setColor(newPalette[numColorBands - colorIndex - 1]);
-            gfx.drawLine(0, i, width - 1, i);
-        }
-        return colorBar;
+    public Color[] getColors() {
+        return palette;
     }
     
     /**
-     * Creates and returns a BufferedImage representing the legend for this 
-     * palette
-     * @param numColorBands The number of color bands to show in the legend
-     * @param title Title for the legend
-     * @param units Units for the legend
-     * @param logarithmic True if the scale is to be logarithmic: otherwise linear
-     * @param colourScaleRange Data values corresponding with the min and max
-     * values of the colour scale
-     * @param transparent True if the legend background is to be transparent.
-     * @param backgroundColor Colour for the background of the legend. It is 
-     * also used to select the colour for the text with greater contrast. 
-     * @return a BufferedImage object representing the legend.  This has a fixed
-     * size (110 pixels wide, 264 pixels high)
-     * @throws IllegalArgumentException if the requested number of colour bands
-     * is less than one or greater than 254.
-     */
-    public BufferedImage createLegend(int numColorBands, String title, String units,
-        boolean logarithmic, Range<Float> colorScaleRange,
-        boolean transparent, Color backgroundColor)
-    {
-        float colourScaleMin = colorScaleRange.getMinimum();
-        float colourScaleMax = colorScaleRange.getMaximum();
-        BufferedImage colourScale = new BufferedImage(LEGEND_WIDTH,
-            LEGEND_HEIGHT, BufferedImage.TYPE_4BYTE_ABGR);
-        Graphics2D gfx = colourScale.createGraphics();
-        
-        // Fill the background.
-        gfx.setColor(transparent ? new Color(0, 0, 0, 0) : backgroundColor);
-        gfx.fillRect(0, 0, LEGEND_WIDTH, LEGEND_HEIGHT);
-
-        // Create the colour bar itself
-        BufferedImage colorBar = this.createColorBar(24, MAX_NUM_COLOURS, numColorBands);
-        // Add the colour bar to the legend
-        gfx.drawImage(colorBar, null, 2, 5);
-        
-        // Draw the text items
-        float[] backgroundHSB = Color.RGBtoHSB(backgroundColor.getRed(),
-                                               backgroundColor.getGreen(),
-                                               backgroundColor.getBlue(), null);
-        Color textColor =  backgroundHSB[2] < 0.5 ? Color.WHITE : Color.BLACK;
-        gfx.setColor(textColor);
-
-        // Add the scale values
-        double min = logarithmic ? Math.log(colourScaleMin) : colourScaleMin;
-        double max = logarithmic ? Math.log(colourScaleMax) : colourScaleMax;
-        double quarter = 0.25 * (max - min);
-        double scaleQuarter = logarithmic ? Math.exp(min + quarter) : min + quarter;
-        double scaleMid = logarithmic ? Math.exp(min + 2 * quarter) : min + 2 * quarter;
-        double scaleThreeQuarter = logarithmic ? Math.exp(min + 3 * quarter) : min + 3 * quarter;
-        gfx.drawString(format(colourScaleMax), 27, 10);
-        gfx.drawString(format(scaleThreeQuarter), 27, 73);
-        gfx.drawString(format(scaleMid), 27, 137);
-        gfx.drawString(format(scaleQuarter), 27, 201);
-        gfx.drawString(format(colourScaleMin), 27, 264);
-        
-        // Add the title as rotated text
-        if (units != null && !units.trim().equals(""))
-        {
-            title += " (" + units + ")";
-        }
-        AffineTransform trans = new AffineTransform();
-        trans.setToTranslation(90, 0);
-        AffineTransform rot = new AffineTransform();
-        rot.setToRotation(Math.PI / 2.0);
-        trans.concatenate(rot);
-        gfx.setTransform(trans);
-        gfx.drawString(title, 5, 0);
-        
-        return colourScale;
-    }
-    
-    /**
-     * Formats a number to a limited number of d.p., using scientific notation
-     * if necessary
-     */
-    private static String format(double d)
-    {
-        if (d == 0.0) return "0";
-        if (Math.abs(d) > 1000 || Math.abs(d) < 0.01)
-        {
-            return new DecimalFormat("0.###E0").format(d);
-        }
-        return new DecimalFormat("0.#####").format(d);
-    }
-    
-    /**
-     * Creates and returns an IndexColorModel based on this palette.
-     * @param numColorBands the number of bands of colour to use in the color
-     * model (note that the ColorModel will have two more bands than this: one
-     * for out-of-range pixels and one for transparent pixels)
-     * @param opacity The opacity of each pixel as a percentage
-     * @param bgColor The color to use for background pixels if transparent=false
-     * @param transparent If true, then the background will be fully-transparent.
-     * @throws IllegalArgumentException if the requested number of colour bands
-     * is less than one or greater than {@link #MAX_NUM_COLOURS}.
-     */
-    public IndexColorModel getColorModel(int numColorBands, int opacity,
-        Color bgColor, Color lowColor, Color highColor, boolean transparent)
-    {
-        // Gets an interpolated/subsampled version of this palette with the
-        // given number of colour bands
-        Color[] newPalette = this.getPalette(numColorBands);
-        // Compute the alpha factor value based on the percentage transparency
-        float alpha_factor;
-        if (opacity >= 100) alpha_factor = 1.0f;
-        else if (opacity <= 0)  alpha_factor = 0.0f;
-        else alpha_factor = 0.01f * opacity;
-
-        // Now simply copy the target palette to arrays of r,g,b and a
-        byte[] r = new byte[numColorBands + 3];
-        byte[] g = new byte[numColorBands + 3];
-        byte[] b = new byte[numColorBands + 3];
-        byte[] a = new byte[numColorBands + 3];
-        for (int i = 0; i < numColorBands; i++)
-        {
-            r[i] = (byte)newPalette[i].getRed();
-            g[i] = (byte)newPalette[i].getGreen();
-            b[i] = (byte)newPalette[i].getBlue();
-            a[i] = (byte) (newPalette[i].getAlpha() * alpha_factor);
-        }
-
-        // The next index represents the background colour (which may be transparent)
-        r[numColorBands] = (byte)bgColor.getRed();
-        g[numColorBands] = (byte)bgColor.getGreen();
-        b[numColorBands] = (byte)bgColor.getBlue();
-        a[numColorBands] = transparent ? 0 : (byte)(bgColor.getAlpha() * alpha_factor);
-
-        if(lowColor != null) {  
-            r[numColorBands + 1] = (byte) lowColor.getRed();
-            g[numColorBands + 1] = (byte) lowColor.getGreen();
-            b[numColorBands + 1] = (byte) lowColor.getBlue();
-            a[numColorBands + 1] = (byte) (lowColor.getAlpha() * alpha_factor);
-        } else {
-            r[numColorBands + 1] = r[0];
-            g[numColorBands + 1] = g[0];
-            b[numColorBands + 1] = b[0];
-            a[numColorBands + 1] = a[0];
-        }
-
-        if(highColor != null) {
-            r[numColorBands + 2] = (byte) highColor.getRed();
-            g[numColorBands + 2] = (byte) highColor.getGreen();
-            b[numColorBands + 2] = (byte) highColor.getBlue();
-            a[numColorBands + 2] = (byte) (highColor.getAlpha() * alpha_factor);
-        } else {
-            r[numColorBands + 2] = r[numColorBands - 1];
-            g[numColorBands + 2] = g[numColorBands - 1];
-            b[numColorBands + 2] = b[numColorBands - 1];
-            a[numColorBands + 2] = a[numColorBands - 1];
-        }
-
-        // Now we can create the color model
-        return new IndexColorModel(8, r.length, r, g, b, a);
-    }
-    
-    /**
-     * Gets a version of this palette with the given number of color bands,
-     * either by subsampling or interpolating the existing palette
-     * @param numColorBands The number of bands of colour to be used in the new
-     * palette
-     * @return An array of Colors, with length numColorBands
-     * @throws IllegalArgumentException if the requested number of colour bands
-     * is less than one or greater than {@link #MAX_NUM_COLOURS}.
-     */
-    private Color[] getPalette(int numColorBands)
-    {
-        if (numColorBands < 1 || numColorBands > MAX_NUM_COLOURS)
-        {
-            // Shouldn't happen: we have constrained this to a sane value in
-            // GetMapStyleRequest
-            throw new IllegalArgumentException("numColorBands must be between 1 and " + MAX_NUM_COLOURS);
-        }
-        Color[] targetPalette;
-        if (numColorBands == this.palette.length)
-        {
-            // We can just use the source palette directly
-            targetPalette = this.palette;
-        }
-        else
-        {
-            // We need to create a new palette
-            targetPalette = new Color[numColorBands];
-            // We fix the endpoints of the target palette to the endpoints of the source palette
-            targetPalette[0] = this.palette[0];
-            targetPalette[targetPalette.length - 1] = this.palette[this.palette.length - 1];
-
-            if (targetPalette.length < this.palette.length)
-            {
-                // We only need some of the colours from the source palette
-                // We search through the target palette and find the nearest colours
-                // in the source palette
-                for (int i = 1; i < targetPalette.length - 1; i++)
-                {
-                    // Find the nearest index in the source palette
-                    // (Multiplying by 1.0f converts integers to floats)
-                    int nearestIndex = Math.round(this.palette.length * i * 1.0f / (targetPalette.length - 1));
-                    targetPalette[i] = this.palette[nearestIndex];
-                }
-            }
-            else
-            {
-                // Transfer all the colours from the source palette into their corresponding
-                // positions in the target palette and use interpolation to find the remaining
-                // values
-                int lastIndex = 0;
-                for (int i = 1; i < this.palette.length - 1; i++)
-                {
-                    // Find the nearest index in the target palette
-                    int nearestIndex = Math.round(targetPalette.length * i * 1.0f / (this.palette.length - 1));
-                    targetPalette[nearestIndex] = this.palette[i];
-                    // Now interpolate all the values we missed
-                    for (int j = lastIndex + 1; j < nearestIndex; j++)
-                    {
-                        // Work out how much we need from the previous colour and how much
-                        // from the new colour
-                        float fracFromThis = (1.0f * j - lastIndex) / (nearestIndex - lastIndex);
-                        targetPalette[j] = interpolate(targetPalette[nearestIndex],
-                            targetPalette[lastIndex], fracFromThis);
-                    }
-                    lastIndex = nearestIndex;
-                }
-                // Now for the last bit of interpolation
-                for (int j = lastIndex + 1; j < targetPalette.length - 1; j++)
-                {
-                    float fracFromThis = (1.0f * j - lastIndex) / (targetPalette.length - lastIndex);
-                    targetPalette[j] = interpolate(targetPalette[targetPalette.length - 1],
-                        targetPalette[lastIndex], fracFromThis);
-                }
-            }
-        }
-        return targetPalette;
-    }
-    
-    /**
-     * Linearly interpolates between two RGB colours
-     * @param c1 the first colour
-     * @param c2 the second colour
-     * @param fracFromC1 the fraction of the final colour that will come from c1
-     * @return the interpolated Color
-     */
-    private static Color interpolate(Color c1, Color c2, float fracFromC1)
-    {
-        float fracFromC2 = 1.0f - fracFromC1;
-        return new Color(
-            Math.round(fracFromC1 * c1.getRed() + fracFromC2 * c2.getRed()),
-            Math.round(fracFromC1 * c1.getGreen() + fracFromC2 * c2.getGreen()),
-            Math.round(fracFromC1 * c1.getBlue() + fracFromC2 * c2.getBlue()),
-            Math.round(fracFromC1 * c1.getAlpha() + fracFromC2 * c2.getAlpha())
-        );
-    }
-    
-    /**
-     * Reads a colour palette (as an array of Color object) from the given File.
+     * Reads a color palette (as an array of Color object) from the given File.
      * Each line in the file contains a single colour, expressed as space-separated
      * RGB or ARGB values.  These values can be integers in the range 0->255 
      * or floats in the range 0->1.  If the palette cannot be read, no exception
@@ -497,7 +194,12 @@ public class ColorPalette
     private static Color[] readColorPalette(Reader paletteReader) throws Exception
     {
         BufferedReader reader = new BufferedReader(paletteReader);
-        List<Color> colours = new ArrayList<Color>();
+        ArrayList<Float> a = new ArrayList<Float>(256);
+        ArrayList<Float> r = new ArrayList<Float>(256);
+        ArrayList<Float> g = new ArrayList<Float>(256);
+        ArrayList<Float> b = new ArrayList<Float>(256);
+        boolean normalized = true;
+        int ncolors = 0;
         String line;
         int lineno = 0;
         try
@@ -505,56 +207,55 @@ public class ColorPalette
             while((line = reader.readLine()) != null)
             {
                 lineno++;
-                Color colour;
-                Float a, r, g, b;
-                float[] components = {-1.0f, -1.0f, -1.0f, -1.0f};
+                Float[] components = {-1.0f, -1.0f, -1.0f, -1.0f};
                 int ncomponents = 0;
                 boolean comment = false;
                 StringTokenizer tok = new StringTokenizer(line.trim());
                 while (ncomponents < 4 && tok.hasMoreTokens() && ! comment)
                 {
                     String token = tok.nextToken();
-                    if (token.startsWith("#")) {
-                       comment = true;
-                    } else {
-                       components[ncomponents++] = Float.valueOf(token);
-                    }
+                    if (token.startsWith("#"))
+                        comment = true;
+                    else
+                        components[ncomponents++] = new Float(token);
                 }
                 if (ncomponents == 0)
                    continue;
                 if (ncomponents < 3)
-                   throw new Exception("missing components");
-                b = components[ncomponents-1];
-                g = components[ncomponents-2];
-                r = components[ncomponents-3];
-                a = ncomponents == 4 ? components[0] : 1.0f;
-                if (r <   0.0f || g <   0.0f || b <   0.0f || a <   0.0f ||
-                    r > 255.0f || g > 255.0f || b > 255.0f || a > 255.0f) {
-                    throw new Exception("invalid component value");
-                }
-                if (r > 1.0f || g > 1.0f || b > 1.0f || a > 1.0f)
-                {
-                    // We assume this colour is expressed in the range 0->255
-                    colour = new Color(r.intValue(), g.intValue(), b.intValue(),
-                                       ncomponents == 4 ? a.intValue() : 255);
-                } else {
-                    // the colours are expressed in the range 0->1
-                    colour = new Color(r, g, b, a);
-                }
-                colours.add(colour);
+                   throw new Exception("invalid number of components");
+                for (int j = 0; j < ncomponents; j++)
+                    if (components[j] < 0.0f || components[j] > 255.0f)
+                        throw new Exception("invalid component value");
+                    else if (normalized && components[j] > 1.0f)
+                        normalized = false;
+                b.add(components[ncomponents-1]);
+                g.add(components[ncomponents-2]);
+                r.add(components[ncomponents-3]);
+                a.add(ncomponents == 4 ? components[0] : null);
+                ncolors++;
             }
         }
-        catch(Exception e)
+        catch (Exception e)
         {
-            throw new Exception("File format error at line " + lineno +": "
+            throw new RuntimeException("File format error at line " + lineno +": "
                 + " each line must contain 3 or 4 numbers (R G B) or (A R G B)"
                 + " between 0 and 255 or 0.0 and 1.0 (" + e.getMessage() + ").");
         }
         finally
         {
-            if (reader != null) reader.close();
+            if (reader != null)
+                reader.close();
         }
-        return colours.toArray(new Color[0]);
+        Color[] colors = new Color[ncolors];
+        if (normalized)
+            for (int i = 0; i < ncolors; i++)
+                colors[i] = new Color(r.get(i), g.get(i), b.get(i),
+                                      a.get(i) == null ? 1.0f : a.get(i));
+        else
+            for (int i = 0; i < ncolors; i++)
+                colors[i] = new Color(r.get(i).intValue(), g.get(i).intValue(), b.get(i).intValue(),
+                                      a.get(i) == null ? 255 : a.get(i).intValue());
+        return colors;
     }
     
     public static void addPalette(String name, Reader reader){

@@ -205,7 +205,7 @@ public interface Layer
     /**
      * Returns the default number of colour bands to be used in palettes that
      * style this layer.
-     * @return number from 1 to {@link ColorPalette#MAX_NUM_COLOURS} inclusive
+     * @return number from 1 to {@link ColorMap#MAX_NUM_COLOURS} inclusive
      */
     public int getDefaultNumColorBands();
 }

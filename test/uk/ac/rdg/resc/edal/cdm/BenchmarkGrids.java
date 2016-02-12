@@ -81,8 +81,8 @@ public class BenchmarkGrids {
     private static BufferedImage vectorGraphic(List<Float> data, CurvilinearGrid curvGrid, ImageProducer ip)
             throws IOException
     {
-        int width = ip.getPicWidth();
-        int height = ip.getPicHeight();
+        int width = ip.getImageWidth();
+        int height = ip.getImageHeight();
         IndexColorModel cm = ip.getColorModel();
         int[] rgbs = new int[cm.getMapSize()];
         cm.getRGBs(rgbs);
