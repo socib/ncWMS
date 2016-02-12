@@ -35,6 +35,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -66,6 +67,7 @@ import uk.ac.rdg.resc.ncwms.controller.GetMapDataRequest;
 import uk.ac.rdg.resc.ncwms.exceptions.InvalidCrsException;
 import uk.ac.rdg.resc.ncwms.exceptions.InvalidDimensionValueException;
 import uk.ac.rdg.resc.ncwms.exceptions.WmsException;
+import uk.ac.rdg.resc.ncwms.wms.DirectionVectorLayer;
 import uk.ac.rdg.resc.ncwms.wms.Layer;
 import uk.ac.rdg.resc.ncwms.wms.ScalarLayer;
 import uk.ac.rdg.resc.ncwms.wms.SimpleVectorLayer;
@@ -485,6 +487,20 @@ public class WmsUtils
             }
         }
         
+        for (Iterator<? extends ScalarLayer> it = scalarLayers.iterator();
+             it.hasNext(); ) {
+            ScalarLayer layer = it.next();
+            VectorLayer vec = null;
+            if (layer.getTitle().contains("from_direction")) {
+                vec = new DirectionVectorLayer(layer.getId(), layer, true, true);
+            } else if (layer.getTitle().contains("to_direction")) {
+                vec = new DirectionVectorLayer(layer.getId(), layer, true, false);
+            }
+            if (vec != null) {
+                vectorLayers.add(vec);
+                it.remove();
+            }
+        }
         return vectorLayers;
         
     }
