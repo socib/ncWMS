@@ -40,19 +40,14 @@
   </distributionManagement>
   <repositories>
     <repository>
-      <id>unidata</id>
-      <name>Unidata Repository</name>
-      <url>https://artifacts.unidata.ucar.edu/content/repositories/unidata/</url>
-    </repository>
+      <id>unidata-releases</id>
+      <name>UNIDATA Releases</name>
+      <url>https://artifacts.unidata.ucar.edu/content/repositories/unidata-releases/</url>
+    </repository>  
     <repository>
       <id>unidata-3rdparty</id>
       <name>Unidata 3rd Party Repository</name>
       <url>https://artifacts.unidata.ucar.edu/content/repositories/unidata-3rdparty/</url>
-    </repository>
-    <repository>
-      <id>mvnsearch</id>
-      <name>mvnsearch</name>
-      <url>http://www.mvnsearch.org/maven2/</url>
     </repository>
     <repository>
       <id>springsource-repo</id>
